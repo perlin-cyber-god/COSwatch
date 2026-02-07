@@ -5,9 +5,13 @@ from datetime import date, timedelta
 from supabase import create_client
 import os
 from dotenv import load_dotenv
+from telegram_client import send_message
+
+
 
 # ---------------- LOAD ENV ----------------
 load_dotenv()
+send_message("Backend is talking. Science imminent.")
 
 # --- NASA CONFIG ---
 API_KEY = os.getenv("NASA_API_KEY")
@@ -24,6 +28,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------- APP SETUP ----------------
 app = FastAPI()
+
 
 app.add_middleware(
     CORSMiddleware,
