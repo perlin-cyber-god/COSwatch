@@ -1,0 +1,294 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Watch | NEO Telemetry Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-space: #05070a;
+            --glass-bg: rgba(15, 23, 42, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-space);
+            color: #e2e8f0;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .glow-cyan { box-shadow: 0 0 25px rgba(6, 182, 212, 0.15); }
+        .glow-red { box-shadow: 0 0 25px rgba(239, 68, 68, 0.2); }
+
+        .hazardous-row {
+            background: rgba(239, 68, 68, 0.03);
+            border-left: 2px solid rgba(239, 68, 68, 0.4);
+        }
+
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-space); }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+  }
+}
+</script>
+</head>
+<body class="selection:bg-cyan-500/30">
+
+    <!-- Ambient Background Elements -->
+    <div class="fixed inset-0 pointer-events-none -z-10">
+        <div class="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-900/10 blur-[120px] rounded-full"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-900/10 blur-[120px] rounded-full"></div>
+        <div class="absolute inset-0 opacity-[0.05]" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 40px 40px;"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 glass border-b border-white/5 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <i data-lucide="radar" class="text-cyan-500 animate-pulse"></i>
+                    <div class="absolute -inset-2 bg-cyan-500/20 blur-md rounded-full animate-pulse-slow"></div>
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-tighter uppercase text-white flex items-center gap-2">
+                        Cosmic Watch <span class="text-[10px] bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30">L1 FEED</span>
+                    </h1>
+                    <p class="text-[9px] uppercase tracking-[0.3em] font-bold text-slate-500">Planetary Defense Telemetry</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-6">
+                <div class="hidden md:flex flex-col items-end">
+                    <span class="text-[10px] uppercase font-bold text-slate-500">System Status</span>
+                    <span id="system-status" class="text-xs text-emerald-400 flex items-center gap-1 font-semibold uppercase tracking-widest">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Operational
+                    </span>
+                </div>
+                <button onclick="fetchNEOData()" id="refresh-btn" class="p-2.5 rounded-xl glass hover:bg-white/10 transition-all text-slate-400 hover:text-white border-slate-800">
+                    <i data-lucide="refresh-cw" size="20"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-6 py-10">
+        <!-- Header -->
+        <header class="mb-10">
+            <div class="flex items-center gap-2 text-cyan-500 mb-3">
+                <i data-lucide="globe" size="18"></i>
+                <span class="text-xs font-black uppercase tracking-[0.4em]">Active Detection Zone: Near-Earth Space</span>
+            </div>
+            <h2 class="text-4xl font-black text-white tracking-tight">NEO Surveillance Dashboard</h2>
+            <p class="text-slate-400 max-w-2xl mt-3 text-sm leading-relaxed">
+                Real-time tracking of Near-Earth Objects (NEOs). Visualizing kinematic trajectories and impact risk scores as reported by the Global Surveillance Network.
+            </p>
+        </header>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10" id="stats-grid">
+            <!-- Loading States for Stats -->
+            <div class="glass p-6 rounded-2xl border-slate-800 animate-pulse h-32"></div>
+            <div class="glass p-6 rounded-2xl border-slate-800 animate-pulse h-32"></div>
+            <div class="glass p-6 rounded-2xl border-slate-800 animate-pulse h-32"></div>
+            <div class="glass p-6 rounded-2xl border-slate-800 animate-pulse h-32"></div>
+        </div>
+
+        <!-- Main Feed Table -->
+        <div class="glass rounded-2xl border-slate-800 overflow-hidden shadow-2xl">
+            <div class="bg-white/5 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <i data-lucide="list" class="text-slate-400" size="18"></i>
+                    <span class="text-sm font-bold uppercase tracking-widest text-slate-300">Live Object Stream</span>
+                </div>
+                <span id="object-count" class="text-[10px] mono text-slate-500 uppercase font-bold bg-slate-800/50 px-3 py-1 rounded-full">0 Objects Tracked</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-slate-500">
+                            <th class="px-6 py-4 text-[11px] font-black uppercase tracking-widest border-b border-slate-800/50">Object Designation</th>
+                            <th class="px-6 py-4 text-[11px] font-black uppercase tracking-widest border-b border-slate-800/50">Classification</th>
+                            <th class="px-6 py-4 text-[11px] font-black uppercase tracking-widest border-b border-slate-800/50">Rel. Velocity</th>
+                            <th class="px-6 py-4 text-[11px] font-black uppercase tracking-widest border-b border-slate-800/50">Miss Distance</th>
+                            <th class="px-6 py-4 text-[11px] font-black uppercase tracking-widest border-b border-slate-800/50">Impact Probability</th>
+                        </tr>
+                    </thead>
+                    <tbody id="neo-table-body" class="divide-y divide-slate-800/50">
+                        <!-- Data will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-16 pt-8 border-t border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6 opacity-60">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                    <i data-lucide="satellite" size="14"></i> Telemetry Sync: <span id="sync-time">---</span>
+                </div>
+                <div class="h-4 w-px bg-slate-800 hidden md:block"></div>
+                <div class="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                    <i data-lucide="shield-check" size="14"></i> Data Source: L1 Lagrange Point Network
+                </div>
+            </div>
+            <div class="text-[9px] text-slate-500 font-bold uppercase tracking-[0.3em]">
+                &copy; 2024 Planetary Defense Systems | Secure Access Only
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8000/neo/feed';
+        const MOCK_DATA = [
+            { name: "4660 Nereus (1982 DB)", hazardous: false, velocity_kph: 23641, miss_distance_km: 3912840, risk_score: 12 },
+            { name: "(2023 DZ2) 'City Killer'", hazardous: true, velocity_kph: 28044, miss_distance_km: 175000, risk_score: 88 },
+            { name: "99942 Apophis (Critical)", hazardous: true, velocity_kph: 30720, miss_distance_km: 31000, risk_score: 96 },
+            { name: "101955 Bennu", hazardous: true, velocity_kph: 101000, miss_distance_km: 7500000, risk_score: 65 },
+            { name: "2024 FG3", hazardous: false, velocity_kph: 15400, miss_distance_km: 12000000, risk_score: 5 },
+            { name: "2012 TC4", hazardous: false, velocity_kph: 50400, miss_distance_km: 44000, risk_score: 42 },
+            { name: "2008 OS7", hazardous: true, velocity_kph: 66000, miss_distance_km: 2800000, risk_score: 74 },
+            { name: "2024 KH3", hazardous: false, velocity_kph: 19200, miss_distance_km: 5600000, risk_score: 18 }
+        ];
+
+        async function fetchNEOData() {
+            const btn = document.getElementById('refresh-btn');
+            const statusLabel = document.getElementById('system-status');
+            
+            btn.classList.add('animate-spin');
+            
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error('Backend offline');
+                const data = await response.json();
+                renderDashboard(data);
+                statusLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Operational`;
+                statusLabel.className = "text-xs text-emerald-400 flex items-center gap-1 font-semibold uppercase tracking-widest";
+            } catch (error) {
+                console.warn("Backend not found, rendering simulated feed...");
+                renderDashboard(MOCK_DATA);
+                statusLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> Simulation Mode`;
+                statusLabel.className = "text-xs text-yellow-400 flex items-center gap-1 font-semibold uppercase tracking-widest";
+            } finally {
+                setTimeout(() => btn.classList.remove('animate-spin'), 600);
+                document.getElementById('sync-time').innerText = new Date().toLocaleTimeString();
+                lucide.createIcons();
+            }
+        }
+
+        function renderDashboard(data) {
+            const tableBody = document.getElementById('neo-table-body');
+            const statsGrid = document.getElementById('stats-grid');
+            const objectCount = document.getElementById('object-count');
+
+            // 1. Calculate Stats
+            const hazardousCount = data.filter(n => n.hazardous).length;
+            const highestRisk = Math.max(...data.map(n => n.risk_score));
+            const avgVelocity = data.reduce((acc, n) => acc + parseFloat(n.velocity_kph || 0), 0) / data.length;
+            objectCount.innerText = `${data.length} Objects Tracked`;
+
+            // 2. Render Stats Grid
+            const stats = [
+                { label: "Total Tracked", val: data.length, icon: "activity", col: "text-cyan-400", bg: "glow-cyan" },
+                { label: "Hazardous", val: hazardousCount, icon: "shield-alert", col: "text-red-400", bg: "glow-red" },
+                { label: "Highest Risk", val: `${highestRisk}%`, icon: "target", col: "text-orange-400", bg: "" },
+                { label: "Avg Velocity", val: `${Math.round(avgVelocity / 1000)}k`, icon: "zap", col: "text-emerald-400", bg: "" }
+            ];
+
+            statsGrid.innerHTML = stats.map(s => `
+                <div class="glass p-6 rounded-2xl border-slate-800 relative overflow-hidden group ${s.bg}">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="p-3 bg-white/5 rounded-xl ${s.col}">
+                            <i data-lucide="${s.icon}" size="24"></i>
+                        </div>
+                    </div>
+                    <h4 class="text-3xl font-black mb-1 mono text-white">${s.val}</h4>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">${s.label}</p>
+                </div>
+            `).join('');
+
+            // 3. Render Table Rows
+            tableBody.innerHTML = data.map(neo => {
+                const riskColor = neo.risk_score > 70 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 
+                                 neo.risk_score > 40 ? 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]' : 
+                                 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]';
+                
+                const riskLabel = neo.risk_score > 70 ? 'CRITICAL' : neo.risk_score > 40 ? 'WARNING' : 'STABLE';
+                const riskText = neo.risk_score > 70 ? 'text-red-400' : neo.risk_score > 40 ? 'text-yellow-400' : 'text-emerald-400';
+
+                return `
+                    <tr class="hover:bg-white/[0.02] transition-colors group ${neo.hazardous ? 'hazardous-row' : ''}">
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="font-bold text-slate-200 group-hover:text-cyan-400 transition-colors truncate max-w-[200px]">${neo.name}</span>
+                                <span class="text-[9px] mono text-slate-600 uppercase tracking-tighter">ID: ${Math.random().toString(36).substr(2, 6).toUpperCase()}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${neo.hazardous 
+                                ? `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-red-500/10 text-red-500 px-2.5 py-1 rounded border border-red-500/20"><i data-lucide="shield-alert" size="10"></i> DANGER</span>`
+                                : `<span class="inline-flex items-center gap-1 text-[9px] font-black bg-emerald-500/10 text-emerald-500 px-2.5 py-1 rounded border border-emerald-500/20">SAFE</span>`
+                            }
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm mono text-slate-400 font-medium">${neo.velocity_kph.toLocaleString()} <span class="text-[10px] opacity-40 font-normal">km/h</span></span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm mono text-slate-400 font-medium">${(neo.miss_distance_km / 1000).toLocaleString()}k <span class="text-[10px] opacity-40 font-normal">km</span></span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col gap-1.5 max-w-[140px]">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[9px] font-black tracking-widest ${riskText}">${riskLabel}</span>
+                                    <span class="text-[10px] mono font-bold text-slate-500">${neo.risk_score}%</span>
+                                </div>
+                                <div class="h-1.5 w-full bg-slate-800/50 rounded-full overflow-hidden">
+                                    <div class="h-full ${riskColor} transition-all duration-1000" style="width: ${neo.risk_score}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchNEOData();
+            // Periodic refresh every 60 seconds
+            setInterval(fetchNEOData, 60000);
+        });
+    </script>
+</body>
+</html>
