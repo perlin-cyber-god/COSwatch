@@ -52,6 +52,164 @@
 
         #auth-overlay { transition: opacity 0.8s ease; }
         body.locked main { filter: blur(15px); pointer-events: none; }
+        /* --- 2D DATA VIEW (Tactical Grid) --- */
+        #data-view-container {
+            display: none; /* Hidden by default */
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle at center, #1a1a24 0%, #000000 100%);
+            padding: 80px 40px; /* Space for UI panel */
+            overflow-y: auto;
+            z-index: 5;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .asteroid-2d {
+            display: inline-block;
+            margin: 20px;
+            border-radius: 50%;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        .asteroid-2d:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+
+        /* The "Max Diameter" (Outer Shell) */
+        .asteroid-shell {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            opacity: 0.3;
+            border: 1px dashed rgba(255,255,255,0.3);
+        }
+
+        /* The "Min Diameter" (Solid Core) */
+        .asteroid-core {
+            border-radius: 50%;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+
+        /* HAZARDOUS STYLES */
+        .hazard-true .asteroid-shell {
+            background-color: rgba(255, 0, 0, 0.1);
+            border-color: #ff3333;
+            box-shadow: 0 0 20px #ff0000;
+        }
+        .hazard-true .asteroid-core {
+            background: linear-gradient(135deg, #800000, #ff0000);
+            border: 1px solid #ff9999;
+        }
+        /* --- UPGRADED 2D VIEW STYLES --- */
+        .analysis-header {
+            max-width: 800px;
+            margin: 0 auto 40px auto;
+            text-align: left;
+            border-left: 2px solid var(--neon-cyan);
+            padding-left: 20px;
+            background: linear-gradient(90deg, rgba(0, 243, 255, 0.1) 0%, transparent 100%);
+        }
+
+        .filter-bar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #8899a6;
+            padding: 8px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .filter-btn:hover, .filter-btn.active {
+            background: rgba(0, 243, 255, 0.2);
+            border-color: var(--neon-cyan);
+            color: white;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+        }
+
+        /* SPEED TAILS */
+        .velocity-tail {
+            position: absolute;
+            top: 50%; left: 50%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5));
+            transform-origin: left center;
+            z-index: -1;
+        }
+
+        /* IMPACT INFO BOX */
+        .impact-info {
+            font-size: 9px;
+            color: #aaa;
+            margin-top: 4px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 4px;
+        }
+        
+        /* SCALE REFERENCE MARKER */
+        .scale-ref {
+            position: absolute;
+            bottom: 10px; right: 10px;
+            height: 100px; width: 2px;
+            background: white;
+            display: none; /* Toggled via JS */
+        }
+        .scale-ref::after {
+            content: "EIFFEL TOWER (330m)";
+            position: absolute;
+            bottom: 0; right: 5px;
+            font-size: 9px;
+            white-space: nowrap;
+            color: white;
+        }
+
+        /* SAFE STYLES */
+        .hazard-false .asteroid-shell {
+            background-color: rgba(0, 200, 255, 0.05);
+            border-color: #00ccff;
+            box-shadow: 0 0 10px #00ccff;
+        }
+        .hazard-false .asteroid-core {
+            background: linear-gradient(135deg, #333344, #556677);
+            border: 1px solid #8899aa;
+        }
+
+        /* INFO LABEL (Appears on Hover) */
+        .asteroid-label {
+            position: absolute;
+            bottom: -30px; left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            background: rgba(0,0,0,0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .asteroid-2d:hover .asteroid-label {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="flex h-screen w-screen overflow-hidden locked">
@@ -136,9 +294,11 @@
 
     <main class="flex-1 relative bg-black">
         <div id="visualization-container" class="absolute inset-0 z-0"></div>
+        <div id="data-view-container"></div>
 
         <div class="absolute top-0 left-0 w-full p-6 flex justify-between items-start z-10 pointer-events-none">
             <div class="pointer-events-auto flex gap-2">
+                <button id="view-toggle" onclick="toggleView()" class="text-xs bg-white/5 text-slate-400 px-3 py-1 border border-white/10 hover:text-white hover:border-cyan-500 transition-all">ANALYSIS VIEW</button>
                 <button onclick="resetCamera('solar')" class="text-xs bg-white/5 text-slate-400 px-3 py-1 border border-white/10 hover:text-white hover:border-cyan-500">SYSTEM VIEW</button>
                 <button onclick="resetCamera('earth')" class="text-xs bg-white/5 text-slate-400 px-3 py-1 border border-white/10 hover:text-white hover:border-cyan-500">EARTH VIEW</button>
             </div>
@@ -253,6 +413,46 @@
             await syncUserWithBackend(data.user.id);
         }
     }
+    // --- NEW: BLUE POINTER ON EARTH ---
+    function addEarthPointer(lat, lon) {
+        const earthObj = planets.find(p => p.name === "Earth");
+        if (!earthObj) return;
+
+        // Earth is at earthObj.mesh.position (which is x=40, y=0, z=0 usually)
+        // But the mesh itself is rotated. We need to attach the pointer TO the Earth mesh
+        // so it spins WITH the Earth.
+
+        // 1. The Marker Geometry (A thin glowing stick)
+        const geometry = new THREE.CylinderGeometry(0.02, 0.02, 0.8, 8);
+        const material = new THREE.MeshBasicMaterial({ 
+            color: 0x00f3ff, // Neon Blue
+            transparent: true,
+            opacity: 0.8
+        });
+        
+        const pointer = new THREE.Mesh(geometry, material);
+        
+        // 2. Calculate Position on Surface (Radius is 1.6)
+        // We use lat/lon 0,0 for now, or whatever you pass
+        const pos = getEarthPosition(lat, lon, 1.6); // 1.6 is Earth's radius in your code
+        
+        pointer.position.copy(pos);
+        
+        // 3. Orient the pointer to stick OUT of the earth
+        pointer.lookAt(new THREE.Vector3(0,0,0)); // Look at center of earth
+        pointer.rotateX(Math.PI / 2); // Rotate 90deg so the cylinder points out
+        
+        // 4. Add to Earth MESH (so it rotates with the planet)
+        earthObj.mesh.add(pointer);
+        
+        // 5. Add a glowing ring at the base
+        const ringGeo = new THREE.RingGeometry(0.04, 0.06, 32);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.copy(pos.clone().multiplyScalar(1.01)); // Slightly above surface
+        ring.lookAt(new THREE.Vector3(0,0,0));
+        earthObj.mesh.add(ring);
+    }
 
     async function handleSignUp() {
         const email = document.getElementById('auth-email').value;
@@ -329,41 +529,122 @@
     }
 
     // --- 3. DATA LOGIC ---
+    // --- 3. DATA LOGIC (DEBUG MODE) ---
     async function fetchNEOData() {
-        try {
-            console.log("Fetching NEO Feed...");
-            const res = await fetch(`${API_URL}/neo/feed`);
-            const rawData = await res.json();
-            
-            let processed = Array.isArray(rawData) ? rawData : MOCK_DATA;
-            if (processed.length < 5) processed = processed.concat(MOCK_DATA);
+        console.group("🚀 STARTING NEO DATA FETCH");
+        console.time("Fetch Duration");
 
+        try {
+            const url = `${API_URL}/neo/feed`;
+            console.log(`📡 Dialing Backend: ${url}`);
+
+            const res = await fetch(url);
+            
+            console.log(`DATA STATUS: ${res.status} ${res.statusText}`);
+            
+            if (!res.ok) {
+                throw new Error(`Server responded with ${res.status}`);
+            }
+
+            const rawData = await res.json();
+            console.log("📦 Raw Payload Received:", rawData);
+
+            // CHECK: Is it an array (our processed list) or NASA raw JSON?
+            let processed = [];
+            
+            if (Array.isArray(rawData)) {
+                console.log(`✅ Backend returned Clean Array of ${rawData.length} objects`);
+                processed = rawData;
+            } else if (rawData.near_earth_objects) {
+                console.warn("⚠️ Backend returned RAW NASA JSON (Not Processed). Processing manually...");
+                // Flatten the date-based structure if needed
+                Object.values(rawData.near_earth_objects).forEach(dayList => {
+                    processed = processed.concat(dayList);
+                });
+            } else {
+                console.error("❌ Data format unrecognized:", rawData);
+            }
+
+            // FALLBACK CHECK
+            if (processed.length === 0) {
+                console.warn("⚠️ Data empty. Switching to Emergency Mock Data.");
+                processed = MOCK_DATA;
+            }
+
+            // LOG THE FIRST ITEM TO VERIFY STRUCTURE
+            if (processed.length > 0) {
+                console.log("🧐 Inspecting First Object:", processed[0]);
+                // Check if 'estimated_diameter' exists
+                if (!processed[0].estimated_diameter && !processed[0].size_m) {
+                    console.error("❌ CRITICAL: 'estimated_diameter' or 'size_m' missing! Asteroids will be invisible.");
+                }
+            }
+
+            // Map to our app format
+            // ... inside fetchNEOData ...
             globalData = processed.map((obj, i) => {
-                let vel = parseFloat(obj.velocity_kph) || 0;
-                let dist = parseFloat(obj.miss_distance_km) || 0;
-                let risk = obj.risk_score || (obj.hazardous ? 80 : 10);
+                // Diameter Logic
+                let diam = 50; 
+                let minDiam = 30; // Default fallback
+
+                if (obj.size_m) {
+                    diam = obj.size_m;
+                    minDiam = diam * 0.7;
+                }
+                else if (obj.estimated_diameter?.meters?.estimated_diameter_max) {
+                    diam = obj.estimated_diameter.meters.estimated_diameter_max;
+                    minDiam = obj.estimated_diameter.meters.estimated_diameter_min;
+                }
+
+                let vel = parseFloat(obj.velocity_kph) || 
+                          parseFloat(obj.close_approach_data?.[0]?.relative_velocity?.kilometers_per_hour) || 0;
+                
+                let dist = parseFloat(obj.miss_distance_km) || 
+                           parseFloat(obj.close_approach_data?.[0]?.miss_distance?.kilometers) || 0;
 
                 return {
-                    id: `neo-${i}`,
+                    id: obj.id || `neo-${i}`,
                     name: obj.name || "Unknown",
                     velocity_kph: vel,
                     miss_distance_km: dist,
-                    size_m: obj.estimated_diameter?.meters?.estimated_diameter_max || 50,
-                    hazardous: obj.hazardous || false,
-                    risk_score: Math.round(risk)
+                    size_m: diam,
+                    raw_diameter_min: minDiam, // <--- NEW FIELD FOR 2D VIEW
+                    raw_diameter_max: diam,    // <--- NEW FIELD FOR 2D VIEW
+                    hazardous: obj.hazardous || obj.is_potentially_hazardous_asteroid || false,
+                    risk_score: obj.risk_score || (obj.is_potentially_hazardous_asteroid ? 85 : 5)
                 };
             });
 
+            console.log(`✅ Final Parsed Data: ${globalData.length} objects ready for 3D.`);
+            
+            // UI UPDATES
             globalData.sort((a, b) => b.risk_score - a.risk_score);
             updateUI(globalData);
-            updateAsteroids(globalData);
+            updateAsteroids(globalData); // <--- This calls the 3D update
             updateRadar(globalData);
 
         } catch (e) {
-            console.warn("Fetch Failed:", e);
+            console.error("🚨 FATAL FETCH ERROR:", e);
+            console.warn("⚠️ System Offline. Loading Simulation Data.");
+            
+            // LOAD MOCK DATA SO APP DOESN'T CRASH
+            globalData = MOCK_DATA.map((obj, i) => ({
+                id: `mock-${i}`,
+                name: obj.name,
+                velocity_kph: obj.velocity_kph,
+                miss_distance_km: obj.miss_distance_km,
+                size_m: obj.estimated_diameter.meters.estimated_diameter_max,
+                hazardous: obj.hazardous,
+                risk_score: obj.risk_score
+            }));
+            updateUI(globalData);
+            updateAsteroids(globalData);
+            updateRadar(globalData);
         }
+        
+        console.timeEnd("Fetch Duration");
+        console.groupEnd();
     }
-
     function updateUI(data) {
         document.getElementById('stat-objects').innerText = data.length;
         document.getElementById('stat-risk').innerText = Math.max(...data.map(d=>d.risk_score||0)) + "%";
@@ -381,6 +662,32 @@
             </tr>
         `).join('');
     }
+    // --- HELPER: GENERATE GLOW TEXTURE (No more 404s) ---
+function createGlowTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gradient.addColorStop(0, 'rgba(255, 170, 0, 1)'); // Center Color
+    gradient.addColorStop(0.2, 'rgba(255, 170, 0, 0.6)');
+    gradient.addColorStop(0.5, 'rgba(255, 100, 0, 0.2)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)'); // Outer Transparent
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 32, 32);
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+    // --- HELPER: Lat/Lon to 3D Position ---
+    function getEarthPosition(lat, lon, radius) {
+        const phi = (90 - lat) * (Math.PI / 180);
+        const theta = (lon + 180) * (Math.PI / 180);
+        
+        const x = -(radius * Math.sin(phi) * Math.cos(theta));
+        const z = (radius * Math.sin(phi) * Math.sin(theta));
+        const y = (radius * Math.cos(phi));
+        
+        return new THREE.Vector3(x, y, z);
+    }
 
     // --- 4. 3D SOLAR SYSTEM ---
     function init3D() {
@@ -388,25 +695,77 @@
         if (container.children.length > 0) return; 
 
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.005);
-        camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
+        // 1. LIGHTING UPGRADE: Brighter, slightly blue-tinted fog for depth
+        scene.fog = new THREE.FogExp2(0x020205, 0.002); 
+
+        camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 20000); 
         camera.position.set(0, 100, 150); 
+        
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.toneMapping = THREE.ReinhardToneMapping;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping; 
+        renderer.toneMappingExposure = 1.3; 
         container.appendChild(renderer.domElement);
+        
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         
-        scene.add(new THREE.AmbientLight(0x404040, 0.5));
-        const sunLight = new THREE.PointLight(0xffaa00, 2, 800);
+        // --- 2. SUPER BRIGHT SUN & AMBIENT ---
+        const ambientLight = new THREE.AmbientLight(0x606080, 1.2); 
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.PointLight(0xffaa00, 5.0, 3000);
+        sunLight.position.set(0, 0, 0);
         scene.add(sunLight);
 
-        // Sun
-        const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 32), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-        scene.add(sun);
+        // --- 3. MULTI-LAYER STAR SYSTEM ---
+        function createStarLayer(count, size, color, spread) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            for(let i = 0; i < count * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * spread;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({
+                size: size,
+                color: color,
+                transparent: true,
+                opacity: 0.8 + Math.random() * 0.2,
+                sizeAttenuation: true,
+                blending: THREE.AdditiveBlending
+            });
+            return new THREE.Points(geometry, material);
+        }
 
-        // Planets
+        // Layer 1: "Star Dust"
+        scene.add(createStarLayer(15000, 0.6, 0x8888aa, 5000));
+        // Layer 2: "Main Stars"
+        scene.add(createStarLayer(4000, 1.5, 0xffffff, 4000));
+        // Layer 3: "Giants"
+        scene.add(createStarLayer(500, 3.5, 0xaaddff, 4000));
+
+
+        // --- SOLAR SYSTEM OBJECTS ---
+        // Sun Mesh 
+        const sun = new THREE.Mesh(
+            new THREE.SphereGeometry(10, 64, 64), 
+            new THREE.MeshBasicMaterial({ color: 0xffaa00 }) 
+        );
+        scene.add(sun);
+        
+        // Giant Glow Sprite (Using the Helper Function)
+        const spriteMaterial = new THREE.SpriteMaterial({ 
+            map: createGlowTexture(), 
+            color: 0xffaa00, 
+            transparent: true, 
+            blending: THREE.AdditiveBlending,
+            opacity: 1.0 
+        });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(60, 60, 1.0); 
+        sun.add(sprite);
+
+        // Planets Setup
         const systemData = [
             { name: "Mercury", color: 0xaaaaaa, size: 0.8, dist: 20, speed: 0.02 },
             { name: "Venus", color: 0xffcc00, size: 1.5, dist: 30, speed: 0.015 },
@@ -420,20 +779,41 @@
 
         systemData.forEach(p => {
             const pGroup = new THREE.Group();
-            const mesh = new THREE.Mesh(new THREE.SphereGeometry(p.size, 32, 32), new THREE.MeshStandardMaterial({ color: p.color }));
+            
+            // Planet Mesh
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(p.size, 32, 32), 
+                new THREE.MeshStandardMaterial({ 
+                    color: p.color,
+                    roughness: 0.6,
+                    metalness: 0.1,
+                    emissive: p.color,
+                    emissiveIntensity: 0.1
+                })
+            );
             mesh.position.x = p.dist;
             pGroup.add(mesh);
             
+            // Rings
             if (p.ring) {
-                const ring = new THREE.Mesh(new THREE.TorusGeometry(p.size+1.5, 0.5, 2, 32), new THREE.MeshBasicMaterial({ color: 0xccaa88, transparent: true, opacity: 0.6 }));
+                const ring = new THREE.Mesh(
+                    new THREE.TorusGeometry(p.size+1.5, 0.5, 2, 64), 
+                    new THREE.MeshStandardMaterial({ 
+                        color: 0xccaa88, 
+                        transparent: true, 
+                        opacity: 0.8,
+                        side: THREE.DoubleSide
+                    })
+                );
                 ring.rotation.x = Math.PI/2;
                 ring.position.x = p.dist;
                 pGroup.add(ring);
             }
             
+            // Orbit Lines
             const orbit = new THREE.Line(
                 new THREE.BufferGeometry().setFromPoints(new THREE.EllipseCurve(0,0, p.dist, p.dist, 0, 2*Math.PI, false, 0).getPoints(128)),
-                new THREE.LineBasicMaterial({color: 0xffffff, transparent:true, opacity:0.1})
+                new THREE.LineBasicMaterial({color: 0xffffff, transparent:true, opacity:0.25})
             );
             orbit.rotation.x = Math.PI/2;
             scene.add(orbit);
@@ -441,108 +821,163 @@
             planets.push({ group: pGroup, speed: p.speed, name: p.name, mesh });
         });
 
-        // Stars
-        const stars = new THREE.BufferGeometry();
-        const sPos = new Float32Array(9000);
-        for(let i=0; i<9000; i++) sPos[i] = (Math.random()-0.5)*800;
-        stars.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
-        scene.add(new THREE.Points(stars, new THREE.PointsMaterial({color:0xffffff, size:0.2, transparent:true})));
+        // --- ADD POINTER TO EARTH (New Delhi) ---
+        // This function must be defined outside init3D
+        addEarthPointer(28.6139, 77.2090); 
 
+        // Event Listeners
         window.addEventListener('resize', () => {
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(container.clientWidth, container.clientHeight);
         });
+
         window.addEventListener('click', onCanvasClick);
         animate();
     }
 
+    // --- 5. UPDATED ASTEROID LOGIC (Tactical Scale: 12x Larger) ---
+    // --- 5. UPDATED ASTEROID LOGIC (2.5x Size, Solid Rock Shapes) ---
+    // --- 5. UPDATED ASTEROID LOGIC (Data-Driven, Deterministic, No Random) ---
+    // --- 5. UPDATED ASTEROID LOGIC (Scientifically Clamped to Earth Zone) ---
     function updateAsteroids(data) {
-        // 1. Clear old asteroids from scene and memory
         asteroids.forEach(a => scene.remove(a.mesh));
         asteroids = [];
 
-        data.forEach((neo, i) => {
-            // --- TACTICAL ORBIT CALCULATION ---
-            // Spread them out nicely between Earth (40) and Jupiter (75)
-            // We use 'i' to ensure they don't all clump on top of each other
-            let r = 45 + (i % 20) + (Math.random() * 10); 
-            
-            // --- BETTER GEOMETRY ---
-            // Use Dodecahedron (12-sided) or Icosahedron with Detail 0 for chunky rock look
-            // Hazardous ones are slightly larger/spikier
-            const geometry = neo.hazardous 
-                ? new THREE.IcosahedronGeometry(Math.max(0.4, neo.size_m/150), 0) // Spiky
-                : new THREE.DodecahedronGeometry(Math.max(0.3, neo.size_m/150), 0); // Chunky
+        const seed = (id) => {
+            let h = 0x811c9dc5;
+            for(let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193);
+            return ((h >>> 0) / 4294967296); 
+        };
 
-            // --- BETTER MATERIAL (The Secret Sauce) ---
+        data.forEach((neo, i) => {
+            // --- ORBITAL FIX ---
+            // Earth is at 40 units.
+            // NEOs are "Near Earth", so they must be close to 40.
+            // Previous error: allowed them to drift to 20 (Mercury).
+            // New Logic: Clamp them to the "Goldilocks Zone" (0.9AU - 1.3AU)
+            
+            const earthPos = 40; 
+            const variation = seed(neo.id + "dist"); // 0 to 1
+            
+            // This puts them between 36 (Just inside Earth) and 52 (Just past Mars)
+            // They will act as a "Cloud" surrounding Earth's orbit, which is accurate for NEOs.
+            let orbitR = 36 + (variation * 16); 
+
+            // Speed: Faster if closer to sun (Kepler's Law approx)
+            const speed = 0.0005 + (1 / orbitR) * 0.05;
+
+            // Inclination: NEOs are often tilted relative to planets
+            const inclination = (seed(neo.id + "inc") - 0.5) * 0.5; // +/- 0.25 rad
+
+            // Start Angle (Random placement in the ring)
+            const angle = seed(neo.id + "angle") * Math.PI * 2;
+
+            // --- VISUALS ---
+            let rawSize = (neo.size_m / 150); 
+            let tacticalSize = Math.max(0.4, Math.min(2.0, rawSize * 2.5));
+
+            const geometry = new THREE.DodecahedronGeometry(tacticalSize, 0);
+            const posAttribute = geometry.attributes.position;
+            const temp = new THREE.Vector3();
+
+            for (let v = 0; v < posAttribute.count; v++) {
+                temp.fromBufferAttribute(posAttribute, v);
+                const noise = 1.0 + Math.sin(temp.x * 3.0) * 0.2 + Math.cos(temp.y * 3.0) * 0.2; 
+                temp.multiplyScalar(noise);
+                posAttribute.setXYZ(v, temp.x, temp.y, temp.z);
+            }
+            geometry.computeVertexNormals();
+
             const material = new THREE.MeshStandardMaterial({
-                color: neo.hazardous ? 0xff3b3b : 0x8899a6, // Bright Red or Blue-Grey Rock
-                roughness: 0.9,  // Rocks are not shiny
-                metalness: 0.1,  // Rocks are not metallic
-                flatShading: true // <--- THIS MAKES THEM LOOK FACETED/ROCKY
+                color: neo.hazardous ? 0xff4d4d : 0x778899,
+                roughness: 0.8,
+                metalness: 0.2,
+                flatShading: true,
+                emissive: neo.hazardous ? 0x220000 : 0x000000,
+                emissiveIntensity: 0.2
             });
 
             const mesh = new THREE.Mesh(geometry, material);
 
-            // --- DEFORMATION (Make them lumpy) ---
-            // Randomly stretch x, y, z to make them imperfect
-            mesh.scale.set(
-                0.8 + Math.random() * 0.4, 
-                0.8 + Math.random() * 0.4, 
-                0.8 + Math.random() * 0.4
-            );
+            // Initial Position
+            const x = Math.cos(angle) * orbitR;
+            const z = Math.sin(angle) * orbitR;
+            const y = Math.sin(angle) * orbitR * Math.sin(inclination);
 
-            // --- POSITIONING ---
-            const angle = Math.random() * Math.PI * 2;
-            // Add some vertical spread (height) so they aren't on a flat disc
-            const height = (Math.random() - 0.5) * 8; 
-            
-            mesh.position.set(Math.cos(angle)*r, height, Math.sin(angle)*r);
-            
-            // Random initial rotation so they don't all face the same way
-            mesh.rotation.set(Math.random()*3, Math.random()*3, Math.random()*3);
-
+            mesh.position.set(x, y, z);
             mesh.userData = { id: neo.id };
+            
             scene.add(mesh);
 
-            // Save for animation loop
             asteroids.push({ 
                 mesh, 
-                dist: r, 
-                angle, 
-                speed: 0.002 + Math.random() * 0.003, // Random orbit speed
-                rotSpeed: { // Random tumble speed
-                    x: (Math.random() - 0.5) * 0.02,
-                    y: (Math.random() - 0.5) * 0.02
+                dist: orbitR, 
+                angle: angle, 
+                inclination: inclination,
+                speed: speed, 
+                rotSpeed: {
+                    x: (seed(neo.id + "rx") - 0.5) * 0.02,
+                    y: (seed(neo.id + "ry") - 0.5) * 0.02,
+                    z: (seed(neo.id + "rz") - 0.5) * 0.02
                 }
             });
         });
     }
 
+    // --- 6. ANIMATION LOOP (Fixed: Unified Prograde Direction) ---
+    // --- 6. ANIMATION LOOP (Synchronized Orbits) ---
     function animate() {
         requestAnimationFrame(animate);
-        
-        // Planet Animation
-        planets.forEach(p => { 
-            p.group.rotation.y += p.speed; 
-            if(p.mesh) p.mesh.rotation.y += 0.02; 
+
+        // A. PLANETS (The Reference Flow)
+        // ---------------------------------------------------------
+        planets.forEach(p => {
+            // Orbit: Counter-Clockwise flow
+            if (p.group) {
+                p.group.rotation.y += p.speed; 
+            }
+
+            // Spin: Day/Night Cycle
+            if (p.mesh) {
+                // Venus/Uranus Spin Backwards (Retrograde)
+                if (p.name === "Venus" || p.name === "Uranus") {
+                    p.mesh.rotation.y -= 0.005; 
+                } else {
+                    p.mesh.rotation.y += 0.005; 
+                }
+            }
         });
 
-        // Asteroid Animation
+        // B. ASTEROIDS (Aligned to Planet Flow)
+        // ---------------------------------------------------------
         asteroids.forEach(a => {
-            // 1. Orbit Move
-            a.angle += a.speed;
-            a.mesh.position.x = Math.cos(a.angle) * a.dist;
-            a.mesh.position.z = Math.sin(a.angle) * a.dist;
+            // FIX: We SUBTRACT speed to match the Three.js rotation matrix direction
+            // Previous: += (Opposite to planets) -> Now: -= (Same as planets)
+            a.angle -= a.speed; 
+
+            // Calculate Position
+            // The logic remains standard circle math, but since angle is decreasing,
+            // the direction of travel flips to match the planets.
+            const x = Math.cos(a.angle) * a.dist;
+            const z = Math.sin(a.angle) * a.dist;
             
-            // 2. Self Tumble (New!)
+            // Vertical Tilt (Inclination)
+            const y = Math.sin(a.angle) * a.dist * Math.sin(a.inclination);
+
+            // Update Mesh
+            a.mesh.position.set(x, y, z);
+
+            // Tumble the Rock
             a.mesh.rotation.x += a.rotSpeed.x;
             a.mesh.rotation.y += a.rotSpeed.y;
+            a.mesh.rotation.z += a.rotSpeed.z;
         });
 
-        if(controls) controls.update();
-        if(renderer) renderer.render(scene, camera);
+        // C. RENDER
+        // ---------------------------------------------------------
+        controls.update();
+        renderer.render(scene, camera);
     }
 
     // --- 5. INTERACTIONS ---
@@ -601,6 +1036,225 @@
             const theta = Math.random() * 6.28;
             return `<div class="absolute w-1 h-1 rounded-full ${n.hazardous ? 'bg-red-500' : 'bg-cyan-500'}" style="top:${50+Math.sin(theta)*r}%; left:${50+Math.cos(theta)*r}%;"></div>`;
         }).join('');
+    }
+    // --- NEW: 2D VIEW LOGIC ---
+    let is3DView = true;
+
+    function toggleView() {
+        const view3D = document.getElementById('visualization-container');
+        const view2D = document.getElementById('data-view-container');
+        const btn = document.getElementById('view-toggle');
+
+        is3DView = !is3DView;
+
+        if (is3DView) {
+            view3D.style.display = 'block';
+            view2D.style.display = 'none';
+            btn.innerText = "ANALYSIS VIEW";
+            btn.style.background = "";
+            btn.style.borderColor = "";
+            btn.style.color = "";
+        } else {
+            view3D.style.display = 'none';
+            view2D.style.display = 'block';
+            btn.innerText = "RETURN TO ORBIT";
+            btn.style.background = "rgba(0, 243, 255, 0.1)";
+            btn.style.borderColor = "#00f3ff";
+            btn.style.color = "#00f3ff";
+            
+            // Render grid if empty
+            if (view2D.innerHTML === "") {
+                render2DView(globalData);
+            }
+        }
+    }
+
+    // --- ADVANCED 2D ANALYSIS LOGIC ---
+    
+    // State for the view
+    let viewState = {
+        filter: 'all', // all, hazard, safe
+        sort: 'size',  // size, speed, energy
+        scaleMode: false // true = show comparison
+    };
+
+    // Physics Constants
+    const DENSITY_ROCK = 2500; // kg/m^3 (Typical stony asteroid)
+    
+    // Helper: Calculate Kinetic Energy (Megatons of TNT)
+    function calculateKineticEnergy(diameterM, velocityKph) {
+        // 1. Mass (Volume * Density) - Assumes sphere
+        const radius = diameterM / 2;
+        const volume = (4/3) * Math.PI * Math.pow(radius, 3);
+        const massKg = volume * DENSITY_ROCK;
+
+        // 2. Velocity (km/h -> m/s)
+        const velocityMs = velocityKph / 3.6;
+
+        // 3. Energy (Joules) = 0.5 * m * v^2
+        const energyJoules = 0.5 * massKg * Math.pow(velocityMs, 2);
+
+        // 4. Convert to Megatons (1 MT = 4.184 x 10^15 J)
+        const megatons = energyJoules / 4.184e15;
+        
+        return megatons;
+    }
+
+    // MAIN RENDER FUNCTION
+    function render2DView(data) {
+        const container = document.getElementById('data-view-container');
+        container.innerHTML = ""; // Clear previous
+
+        // --- A. HEADER & DESCRIPTION ---
+        const header = document.createElement('div');
+        header.className = 'analysis-header';
+        header.innerHTML = `
+            <h1 class="syne text-3xl text-white mb-2 uppercase">Target Analysis <span class="text-cyan-500">// Sector 7</span></h1>
+            <p class="mono text-xs text-slate-400 leading-relaxed">
+                <strong class="text-white">MODE: TECHNICAL ASSESSMENT.</strong> 
+                Visualizing physical cross-sections vs. radar uncertainty range. 
+                <br>
+                <span class="text-cyan-500">■ OUTLINE:</span> Maximum possible diameter (Albedo limit).
+                <span class="text-slate-500">■ CORE:</span> Minimum confirmed mass.
+                <br>
+                <span class="text-red-500">⚠ IMPACT ENERGY:</span> Estimated kinetic yield in Megatons (MT) if impact occurs.
+            </p>
+        `;
+        container.appendChild(header);
+
+        // --- B. FILTER & SORT BAR ---
+        const controls = document.createElement('div');
+        controls.className = 'filter-bar';
+        
+        const buttons = [
+            { text: 'ALL TARGETS', action: () => setFilter('all') },
+            { text: 'HAZARDOUS ONLY', action: () => setFilter('hazard') },
+            { text: 'SORT: SIZE', action: () => setSort('size') },
+            { text: 'SORT: SPEED', action: () => setSort('speed') },
+            { text: 'SORT: ENERGY', action: () => setSort('energy') },
+            { text: 'TOGGLE SCALE REF', action: () => toggleScale() }
+        ];
+
+        buttons.forEach(btn => {
+            const b = document.createElement('button');
+            b.className = 'filter-btn';
+            b.innerText = btn.text;
+            b.onclick = (e) => {
+                // Remove active class from siblings
+                Array.from(controls.children).forEach(c => c.classList.remove('active'));
+                b.classList.add('active');
+                btn.action();
+            };
+            controls.appendChild(b);
+        });
+        container.appendChild(controls);
+
+        // --- C. DATA PROCESSING ---
+        // 1. Filter
+        let displayData = data.filter(d => {
+            if (viewState.filter === 'hazard') return d.hazardous;
+            return true;
+        });
+
+        // 2. Sort
+        displayData.sort((a, b) => {
+            const energyA = calculateKineticEnergy(a.size_m, a.velocity_kph);
+            const energyB = calculateKineticEnergy(b.size_m, b.velocity_kph);
+
+            if (viewState.sort === 'size') return b.size_m - a.size_m;
+            if (viewState.sort === 'speed') return b.velocity_kph - a.velocity_kph;
+            if (viewState.sort === 'energy') return energyB - energyA;
+            return 0;
+        });
+
+        // --- D. RENDER GRID ---
+        const grid = document.createElement('div');
+        grid.style.textAlign = "center";
+
+        displayData.forEach(neo => {
+            // Calculations
+            let maxMeters = neo.size_m; 
+            let minMeters = neo.raw_diameter_min || (maxMeters * 0.6); 
+            const energy = calculateKineticEnergy(maxMeters, neo.velocity_kph);
+
+            // Screen Scale (Clamped)
+            const scale = 0.5; 
+            const outerSize = Math.max(40, Math.min(300, maxMeters * scale)); 
+            const innerSize = Math.max(10, Math.min(280, minMeters * scale));
+
+            // Wrapper
+            const wrapper = document.createElement('div');
+            wrapper.className = `asteroid-2d hazard-${neo.hazardous}`;
+            wrapper.style.width = `${outerSize}px`;
+            wrapper.style.height = `${outerSize}px`;
+
+            // 1. TAIL (Visualizing Velocity)
+            // Length based on speed (Scale: 1000kph = 1px)
+            const tailLen = Math.min(200, neo.velocity_kph / 500); 
+            const tail = document.createElement('div');
+            tail.className = 'velocity-tail';
+            tail.style.width = `${outerSize + tailLen}px`;
+            // Random rotation for "swarm" look, or fixed for "flow"
+            const rot = Math.random() * 360;
+            tail.style.transform = `translate(-50%, -50%) rotate(${rot}deg)`;
+            
+            // 2. SHELL & CORE
+            const shell = document.createElement('div');
+            shell.className = 'asteroid-shell';
+            const core = document.createElement('div');
+            core.className = 'asteroid-core';
+            core.style.width = `${innerSize}px`;
+            core.style.height = `${innerSize}px`;
+
+            // 3. HOVER LABEL (With Energy Stats)
+            const label = document.createElement('div');
+            label.className = 'asteroid-label';
+            label.innerHTML = `
+                <span class="text-cyan-400 font-bold">${neo.name}</span><br>
+                DIA: ${Math.round(minMeters)}m - ${Math.round(maxMeters)}m<br>
+                VEL: ${Math.round(neo.velocity_kph).toLocaleString()} km/h<br>
+                <div class="impact-info text-${neo.hazardous ? 'red-400' : 'slate-400'}">
+                    IMPACT YIELD: ${energy < 0.001 ? '<1 KT' : energy.toFixed(2) + ' MT'}
+                </div>
+            `;
+
+            wrapper.appendChild(tail); // Add tail first (behind)
+            wrapper.appendChild(shell);
+            wrapper.appendChild(core);
+            wrapper.appendChild(label);
+            grid.appendChild(wrapper);
+        });
+
+        container.appendChild(grid);
+
+        // --- E. SCALE REFERENCE (Eiffel Tower) ---
+        if (viewState.scaleMode) {
+            // Eiffel tower is ~330m. At scale 0.5, that is 165px.
+            const ref = document.createElement('div');
+            ref.style.position = 'fixed';
+            ref.style.bottom = '20px';
+            ref.style.right = '20px';
+            ref.style.height = '165px'; // 330m * 0.5 scale
+            ref.style.width = '40px';
+            ref.style.borderRight = '2px dashed white';
+            ref.style.borderBottom = '2px solid white';
+            ref.innerHTML = "<div style='position:absolute; bottom:0; right:10px; color:white; font-size:10px; font-family:monospace; text-align:right;'>EIFFEL<br>TOWER<br>(330m)</div>";
+            container.appendChild(ref);
+        }
+    }
+
+    // UI Helper Functions
+    function setFilter(type) {
+        viewState.filter = type;
+        render2DView(globalData);
+    }
+    function setSort(type) {
+        viewState.sort = type;
+        render2DView(globalData);
+    }
+    function toggleScale() {
+        viewState.scaleMode = !viewState.scaleMode;
+        render2DView(globalData);
     }
 
     function openAdminPrompt() {
