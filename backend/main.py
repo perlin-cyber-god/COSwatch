@@ -1,17 +1,24 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import requests
 from datetime import date, timedelta
 from supabase import create_client
+import os
+from dotenv import load_dotenv
 
-# ---------------- NASA CONFIG ----------------
-API_KEY = "MfXTgtAvf7g9qCg3ukNH7zxf1wq4CePTSBQi4AUD"
+# ---------------- LOAD ENV ----------------
+load_dotenv()
+
+# --- NASA CONFIG ---
+API_KEY = os.getenv("NASA_API_KEY")
 BASE_URL = "https://api.nasa.gov/neo/rest/v1"
 
-# ---------------- SUPABASE CONFIG ----------------
-SUPABASE_URL = "https://toamgacouwrwtibzbwyo.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvYW1nYWNvdXdyd3RpYnpid3lvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0MzMwMzIsImV4cCI6MjA4NjAwOTAzMn0.RF1k9QJG6sL6N1CBwPfHH-Zv0Jou1Lh3202dHolkmL0"
+# --- SUPABASE CONFIG ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_KEY:
+    print("❌ Error: SUPABASE_KEY not found. Check your .env file.")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -26,22 +33,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------- AUTH SETUP ----------------
-security = HTTPBearer()
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-    token = credentials.credentials
-    user = supabase.auth.get_user(token)
-    return user.user.id
 
-# ---------------- USER TIER ----------------
+# ---------------- USER INIT ----------------
+@app.post("/user/init")
+def init_user(user_id: str):
+    res = (
+        supabase.table("community_members")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    )
 
-@app.get("/user/tier")
-def get_user_tier(
-    user_id: str = Depends(get_current_user)
-):
+    if not res.data:
+        supabase.table("community_members").insert({
+            "user_id": user_id,
+            "status": "pending",
+            "role": "researcher"
+        }).execute()
+        return {"tier": "researcher"}
+
+    record = res.data[0]
+
+    if record["role"] == "admin":
+        return {"tier": "admin"}
+
+    if record["status"] == "approved":
+        return {"tier": "community"}
+
+    return {"tier": "researcher"}
+
+
+# ---------------- GET USER TIER ----------------
+@app.get("/user/tier/{user_id}")
+def get_user_tier(user_id: str):
     res = (
         supabase.table("community_members")
         .select("*")
@@ -62,36 +87,10 @@ def get_user_tier(
 
     return {"tier": "researcher"}
 
-# ---------------- COMMUNITY REQUEST ----------------
-
-@app.post("/community/request")
-def request_community_access(user_id: str = Depends(get_current_user)):
-    res = (
-        supabase.table("community_members")
-        .select("*")
-        .eq("user_id", user_id)
-        .execute()
-    )
-
-    if res.data:
-        return {"message": "Request already exists", "data": res.data}
-
-    data = supabase.table("community_members").insert({
-        "user_id": user_id,
-        "status": "pending",
-        "role": "researcher"
-    }).execute()
-
-    return {"message": "Request submitted", "data": data.data}
 
 # ---------------- ADMIN APPROVAL ----------------
-
-@app.post("/community/approve/{target_user_id}")
-def approve_user(
-    target_user_id: str,
-    admin_id: str = Depends(get_current_user)
-):
-    # check admin role
+@app.post("/community/approve")
+def approve_user(admin_id: str, target_user_id: str):
     res = (
         supabase.table("community_members")
         .select("*")
@@ -102,17 +101,15 @@ def approve_user(
     if not res.data or res.data[0]["role"] != "admin":
         return {"error": "Not authorized"}
 
-    update = (
-        supabase.table("community_members")
-        .update({"status": "approved"})
-        .eq("user_id", target_user_id)
+    supabase.table("community_members") \
+        .update({"status": "approved"}) \
+        .eq("user_id", target_user_id) \
         .execute()
-    )
 
-    return {"message": "User approved", "data": update.data}
+    return {"message": "User approved"}
+
 
 # ---------------- RISK ENGINE ----------------
-
 def risk_score(neo):
     try:
         diameter = neo["estimated_diameter"]["meters"]["estimated_diameter_max"]
@@ -131,14 +128,14 @@ def risk_score(neo):
     except:
         return 0
 
-# ---------------- ROOT ----------------
 
+# ---------------- ROOT ----------------
 @app.get("/")
 def root():
     return {"message": "Cosmic Watch Backend Running"}
 
-# ---------------- NEO FEED ----------------
 
+# ---------------- NEO FEED ----------------
 @app.get("/neo/feed")
 def get_neo_feed():
     today = date.today()
