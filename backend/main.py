@@ -1,7 +1,6 @@
-#this is the main backend, apart from fetching data  , this also controlls user sessions
-
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import requests
 from datetime import date, timedelta
 from supabase import create_client
@@ -27,38 +26,90 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------- WATCHLIST ENDPOINTS ----------------
+# ---------------- AUTH SETUP ----------------
+security = HTTPBearer()
 
-@app.post("/watchlist/{asteroid_id}")
-def add_to_watchlist(asteroid_id: str, authorization: str = Header(...)):
-    token = authorization.replace("Bearer ", "")
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
     user = supabase.auth.get_user(token)
+    return user.user.id
 
-    user_id = user.user.id
+# ---------------- USER TIER ----------------
 
-    data = supabase.table("watchlist").insert({
-        "user_id": user_id,
-        "asteroid_id": asteroid_id
-    }).execute()
-
-    return data.data
-
-
-@app.get("/watchlist")
-def get_watchlist(authorization: str = Header(...)):
-    token = authorization.replace("Bearer ", "")
-    user = supabase.auth.get_user(token)
-
-    user_id = user.user.id
-
-    data = (
-        supabase.table("watchlist")
+@app.get("/user/tier")
+def get_user_tier(
+    user_id: str = Depends(get_current_user)
+):
+    res = (
+        supabase.table("community_members")
         .select("*")
         .eq("user_id", user_id)
         .execute()
     )
 
-    return data.data
+    if not res.data:
+        return {"tier": "researcher"}
+
+    record = res.data[0]
+
+    if record["role"] == "admin":
+        return {"tier": "admin"}
+
+    if record["status"] == "approved":
+        return {"tier": "community"}
+
+    return {"tier": "researcher"}
+
+# ---------------- COMMUNITY REQUEST ----------------
+
+@app.post("/community/request")
+def request_community_access(user_id: str = Depends(get_current_user)):
+    res = (
+        supabase.table("community_members")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if res.data:
+        return {"message": "Request already exists", "data": res.data}
+
+    data = supabase.table("community_members").insert({
+        "user_id": user_id,
+        "status": "pending",
+        "role": "researcher"
+    }).execute()
+
+    return {"message": "Request submitted", "data": data.data}
+
+# ---------------- ADMIN APPROVAL ----------------
+
+@app.post("/community/approve/{target_user_id}")
+def approve_user(
+    target_user_id: str,
+    admin_id: str = Depends(get_current_user)
+):
+    # check admin role
+    res = (
+        supabase.table("community_members")
+        .select("*")
+        .eq("user_id", admin_id)
+        .execute()
+    )
+
+    if not res.data or res.data[0]["role"] != "admin":
+        return {"error": "Not authorized"}
+
+    update = (
+        supabase.table("community_members")
+        .update({"status": "approved"})
+        .eq("user_id", target_user_id)
+        .execute()
+    )
+
+    return {"message": "User approved", "data": update.data}
 
 # ---------------- RISK ENGINE ----------------
 

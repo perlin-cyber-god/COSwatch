@@ -1,4 +1,3 @@
-#login_test.py for login test with "email": "test@test.com","password": "12345678"
 from supabase import create_client
 
 SUPABASE_URL = "https://toamgacouwrwtibzbwyo.supabase.co"
@@ -6,9 +5,12 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-res = supabase.auth.sign_in_with_password({
-    "email": "test@test.com",
-    "password": "12345678"
-})
+def login(email, password):
+    res = supabase.auth.sign_in_with_password({
+        "email": email,
+        "password": password
+    })
+    print(f"{email} token:\n", res.session.access_token, "\n")
 
-print(res.session.access_token)
+login("user@test.com", "12345678")
+login("admin@test.com", "12345678")
