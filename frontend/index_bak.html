@@ -397,24 +397,38 @@
     const container = document.getElementById('visualization-container');
 
     // --- 1. ROBUST DATA FETCHING ---
+    // --- 1. SIMPLIFIED DATA FETCHING (Restored) ---
     async function fetchNEOData() {
+        const btn = document.getElementById('refresh-btn');
+        const statusLabel = document.getElementById('status-indicator');
+        
         try {
+            // Attempt to talk to the backend
             const res = await fetch(API_URL);
-            let data = res.ok ? await res.json() : MOCK_DATA;
             
-            // Normalize data structure (Handle NASA object vs simple Array)
-            if (!Array.isArray(data)) {
-                if (data.near_earth_objects) data = Object.values(data.near_earth_objects).flat();
-                else data = MOCK_DATA;
-            }
+            // If connection fails, throw error to trigger fallback
+            if (!res.ok) throw new Error("Backend connection failed");
 
+            // Trust the data directly (No strict structure checks)
+            const data = await res.json();
+            
+            console.log("📡 Connected. Received vectors:", data.length);
+            
             renderDashboard(data);
             update3DObjects(data);
+            
+            // Update Status to Green
+            statusLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_cyan]"></span> DSN_LINK_ACTIVE`;
 
         } catch (e) {
-            console.error("Data Fetch Error:", e);
+            console.warn("⚠️ Connection Lost. Switching to SIMULATION MODE.", e);
+            
+            // Fallback to MOCK_DATA (The 5 items you see)
             renderDashboard(MOCK_DATA);
             update3DObjects(MOCK_DATA);
+            
+            // Update Status to Yellow (Simulated)
+            statusLabel.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span> FEED_SIMULATED`;
         }
     }
 

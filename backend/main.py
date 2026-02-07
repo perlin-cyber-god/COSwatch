@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from supabase import create_client
 
 # ---------------- NASA CONFIG ----------------
-API_KEY = "MfXTgtAvf7g9qCg3ukNH7zxf1wq4CePTSBQi4AUD"
+API_KEY = "C1fecjBmt0q9ipCtq34T15dBRpEkWaGmeZ0LLEZa"
 BASE_URL = "https://api.nasa.gov/neo/rest/v1"
 
 # ---------------- SUPABASE CONFIG ----------------
