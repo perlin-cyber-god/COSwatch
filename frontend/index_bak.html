@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Watch | Strategic Mission Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-black: #000000;
+            --tech-cyan: #00ffff;
+            --warn-yellow: #ffcc00;
+            --white: #ffffff;
+            --hazard-red: #ff3333;
+            --tech-cyan-transparent: rgba(0, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-black);
+            color: var(--white);
+            margin: 0;
+            scroll-behavior: smooth;
+            overflow-x: hidden;
+        }
+
+        .font-syne { font-family: 'Syne', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: var(--bg-black); }
+        ::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--tech-cyan); }
+
+        /* Branding: Blinking Dots Animation */
+        .logo-dots::after {
+            content: '..';
+            display: inline-block;
+            animation: typing-dots 1.5s steps(3) infinite;
+            width: 1.2em;
+        }
+        @keyframes typing-dots {
+            0% { content: ''; }
+            33% { content: '.'; }
+            66%, 100% { content: '..'; }
+        }
+
+        /* Starfield Background */
+        .stars-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -2;
+            background: black;
+        }
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: shimmer var(--duration) infinite ease-in-out;
+        }
+        @keyframes shimmer {
+            0%, 100% { opacity: 0.2; transform: scale(0.8); }
+            50% { opacity: 0.8; transform: scale(1.2); }
+        }
+
+        /* Tech Card Styling */
+        .tech-card {
+            background: rgba(10, 10, 10, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .tech-card:hover {
+            border-color: var(--tech-cyan);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.05);
+        }
+
+        section {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 6rem 2rem;
+            position: relative;
+        }
+
+        /* --- RESTORED TABLE AESTHETICS (From Old Code) --- */
+        .mission-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+        .mission-table th {
+            text-transform: uppercase;
+            font-size: 0.8rem; /* Restored size */
+            letter-spacing: 0.25em;
+            color: #888; /* Restored contrast */
+            padding: 1.25rem;
+            text-align: left;
+        }
+        .mission-table tr {
+            background: rgba(255, 255, 255, 0.015);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+        /* Kept the new hover glow effect though, it's cool */
+        .mission-table tr:hover {
+            background: rgba(0, 255, 255, 0.03);
+            transform: scale(1.01);
+            border-left: 4px solid var(--tech-cyan);
+        }
+        .mission-table td {
+            padding: 1.5rem 1.25rem; /* Restored padding */
+            font-size: 0.85rem; /* Restored size */
+            border-top: 1px solid rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Kinetic Table Animations */
+        .hazard-glow {
+            animation: pulse-red-glow 3s infinite ease-in-out;
+            border-left: 2px solid var(--hazard-red) !important;
+        }
+        @keyframes pulse-red-glow {
+            0%, 100% { box-shadow: inset 10px 0 15px -10px rgba(255, 51, 51, 0.2); }
+            50% { box-shadow: inset 25px 0 30px -10px rgba(255, 51, 51, 0.4); }
+        }
+
+        /* Radar Pings */
+        .sonar-ping { position: relative; }
+        .sonar-ping::after {
+            content: ''; position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%; height: 100%;
+            border-radius: 50%;
+        }
+        .ping-red::after { background: var(--hazard-red); animation: ping-anim 1.5s infinite; }
+        .ping-cyan::after { background: var(--tech-cyan); animation: ping-anim 4s infinite; }
+        @keyframes ping-anim {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+        }
+
+        /* Scanline CRT Overlay */
+        .scanline-container { position: relative; overflow: hidden; }
+        .scanline-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none; z-index: 5; opacity: 0.15;
+        }
+        .moving-line {
+            position: absolute; top: -100%; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent, rgba(0, 255, 255, 0.05), transparent);
+            animation: scanline-move 8s linear infinite;
+        }
+        @keyframes scanline-move { 0% { top: -100%; } 100% { top: 100%; } }
+
+        /* 3D Visualizer */
+        #visualization-container { width: 100%; height: 65vh; border-radius: 1rem; overflow: hidden; position: relative; }
+
+        /* Buttons */
+        .btn-mission {
+            border: 1px solid var(--tech-cyan); color: var(--tech-cyan);
+            padding: 1rem 2.5rem; text-transform: uppercase;
+            font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+            transition: all 0.3s ease; letter-spacing: 0.15em; background: transparent;
+        }
+        .btn-mission:hover:not(:disabled) {
+            background: var(--tech-cyan); color: black;
+            box-shadow: 0 0 25px rgba(0, 255, 255, 0.4);
+        }
+
+        .risk-bar { height: 2px; background: rgba(255, 255, 255, 0.1); position: relative; overflow: hidden; }
+        .risk-fill { height: 100%; transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1); }
+        
+        .locked-badge {
+            font-size: 0.6rem; letter-spacing: 0.2em; color: var(--warn-yellow);
+            padding: 0.25rem 0.5rem; border: 1px solid rgba(255, 204, 0, 0.3);
+            border-radius: 4px; background: rgba(255, 204, 0, 0.05);
+        }
+
+        /* Velocity Gauge */
+        .gauge-bg { height: 4px; width: 100%; background: rgba(255, 255, 255, 0.05); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+        .gauge-fill { height: 100%; transition: width 1s ease-out; }
+    </style>
+</head>
+<div id="risk-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center backdrop-blur-sm">
+    <div class="tech-card p-8 rounded-xl max-w-lg w-full border border-yellow-500/30 relative">
+        <button onclick="document.getElementById('risk-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
+        
+        <h3 class="font-syne text-2xl text-yellow-500 mb-2">RISK ASSESSMENT PROTOCOL</h3>
+        <p class="text-xs mono text-slate-400 mb-6">TARGET: <span id="risk-target-name" class="text-white">---</span></p>
+
+        <div class="space-y-4 font-mono text-sm">
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-cyan-400">Kinetic Velocity (v)</span>
+                <span id="calc-vel" class="text-white">0 km/h</span>
+            </div>
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-cyan-400">Proximity Vector (d)</span>
+                <span id="calc-dist" class="text-white">0 km</span>
+            </div>
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-red-400">Hazard Multiplier</span>
+                <span id="calc-haz" class="text-white">Active</span>
+            </div>
+            <div class="mt-4 p-4 bg-white/5 rounded border border-white/10">
+                <div class="text-[10px] text-slate-500 uppercase mb-1">Calculation Algorithm</div>
+                <code class="text-yellow-400 text-xs">Risk = (v_norm * 0.4) + (d_inv * 0.6) + HAZARD_BONUS</code>
+            </div>
+            <div class="flex justify-between items-center pt-2">
+                <span class="uppercase tracking-widest text-xs">Total Threat Index</span>
+                <span id="calc-total" class="text-3xl font-bold text-yellow-500">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="risk-modal" class="fixed inset-0 bg-black/90 z-[60] hidden flex items-center justify-center backdrop-blur-sm">
+    <div class="tech-card p-8 rounded-xl max-w-lg w-full border border-yellow-500/30 relative">
+        <button onclick="document.getElementById('risk-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
+        
+        <h3 class="font-syne text-2xl text-yellow-500 mb-2">RISK ASSESSMENT PROTOCOL</h3>
+        <p class="text-xs mono text-slate-400 mb-6">TARGET: <span id="risk-target-name" class="text-white">---</span></p>
+
+        <div class="space-y-4 font-mono text-sm">
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-cyan-400">Kinetic Velocity (v)</span>
+                <span id="calc-vel" class="text-white">0 km/h</span>
+            </div>
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-cyan-400">Proximity Vector (d)</span>
+                <span id="calc-dist" class="text-white">0 km</span>
+            </div>
+            <div class="flex justify-between border-b border-white/10 pb-2">
+                <span class="text-red-400">Hazard Multiplier</span>
+                <span id="calc-haz" class="text-white">Active</span>
+            </div>
+            <div class="mt-4 p-4 bg-white/5 rounded border border-white/10">
+                <div class="text-[10px] text-slate-500 uppercase mb-1">Calculation Algorithm</div>
+                <code class="text-yellow-400 text-xs">Risk = (v_norm * 0.4) + (d_inv * 0.6) + HAZARD_BONUS</code>
+            </div>
+            <div class="flex justify-between items-center pt-2">
+                <span class="uppercase tracking-widest text-xs">Total Threat Index</span>
+                <span id="calc-total" class="text-3xl font-bold text-yellow-500">0%</span>
+            </div>
+        </div>
+    </div>
+</div>
+<body>
+
+    <div class="stars-container" id="stars-field"></div>
+    <nav class="fixed top-0 left-0 w-full z-50 px-10 py-8 flex items-center justify-between pointer-events-none">
+        <div class="pointer-events-auto">
+            <span class="font-syne text-2xl tracking-tighter uppercase flex items-center gap-0">
+                coswatch<span class="logo-dots text-cyan-400"></span>
+            </span>
+        </div>
+        <div class="flex items-center gap-12 pointer-events-auto text-[0.7rem] mono uppercase tracking-[0.35em] text-slate-500">
+            <a href="#hero" class="hover:text-cyan-400 transition-all">Telemetry</a>
+            <a href="#analysis" class="hover:text-cyan-400 transition-all">Proximity</a>
+            <a href="#strategic" class="hover:text-cyan-400 transition-all">Hub</a>
+            <div id="status-indicator" class="flex items-center gap-3 text-cyan-400 font-bold">
+                <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_cyan]"></span>
+                DSN_LINK_ACTIVE
+            </div>
+        </div>
+    </nav>
+
+    <section id="hero">
+        <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-24 items-center">
+            
+            <div class="lg:col-span-3 space-y-10">
+                <div class="space-y-4">
+                    <div class="inline-flex items-center gap-3 px-4 py-1.5 border border-cyan-500/30 rounded-full bg-cyan-500/5">
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_cyan]"></span>
+                        <span class="text-[10px] mono uppercase tracking-[0.2em] text-cyan-400">Lagrange Point Observation</span>
+                    </div>
+                    <h1 class="font-syne text-5xl xl:text-6xl leading-[0.9] uppercase tracking-tighter">
+                        Overwatch<br/><span class="text-white">the Cosmos</span>
+                    </h1>
+                    <p class="text-slate-400 text-xs max-w-sm font-light leading-relaxed tracking-wide pt-4">
+                        Synchronized planetary defense telemetry. Click any trajectory to initiate tactical target locking.
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="tech-card p-4 rounded-lg">
+                        <span class="block text-[8px] mono text-slate-500 uppercase tracking-widest mb-1">Active Vectors</span>
+                        <span id="stat-objects" class="text-2xl font-bold mono">--</span>
+                    </div>
+                    <div class="tech-card p-4 rounded-lg">
+                        <span class="block text-[8px] mono text-slate-500 uppercase tracking-widest mb-1">Max Risk</span>
+                        <span id="stat-risk" class="text-2xl font-bold mono text-yellow-500">--%</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-9 lg:pl-16">
+                <div class="tech-card rounded-xl overflow-hidden relative scanline-container">
+                    <div class="scanline-overlay"></div>
+                    <div class="moving-line"></div>
+                    <div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02] relative z-10">
+                        <span class="text-xs mono uppercase tracking-[0.4em] text-slate-500">Real-Time Object Feed</span>
+                        <button onclick="fetchNEOData()" id="refresh-btn" class="text-cyan-400 hover:rotate-180 transition-transform duration-700">
+                            <i data-lucide="refresh-cw" size="18"></i>
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto max-h-[60vh] overflow-y-auto px-4 custom-scrollbar relative z-10">
+                        <table class="mission-table">
+                            <thead>
+                                <tr>
+                                    <th>Object Designation</th>
+                                    <th>Status</th>
+                                    <th>Velocity (v)</th>
+                                    <th>Miss Dist (d)</th>
+                                    <th>Risk %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="neo-table-body">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="analysis" class="bg-black">
+        <div class="max-w-7xl mx-auto w-full space-y-16">
+            <div class="flex justify-between items-end border-b border-white/5 pb-10">
+                <div class="space-y-4">
+                    <h2 class="font-syne text-5xl uppercase tracking-tighter">Planetary Target Lock</h2>
+                    <p class="text-slate-500 mono text-xs uppercase tracking-[0.4em]">Interactive spatio-temporal interpolation</p>
+                </div>
+                <div id="target-info" class="hidden animate-pulse">
+                    <div class="text-[10px] mono uppercase text-cyan-400 mb-1">Locked on:</div>
+                    <div id="locked-target-name" class="text-xl font-bold text-white">---</div>
+                </div>
+            </div>
+            <div id="visualization-container" class="tech-card border-white/10 group"></div>
+        </div>
+    </section>
+
+    <section id="strategic">
+        <div class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-24 items-start">
+            <div class="lg:col-span-5 space-y-12">
+                <div class="space-y-6">
+                    <h2 class="font-syne text-6xl uppercase tracking-tighter">Strategic<br/>Defensive Hub</h2>
+                    <p class="text-slate-400 text-sm leading-relaxed max-w-sm font-light">
+                        Access coordination protocols for planetary defense units. Modules require L4 biometric verification for deployment.
+                    </p>
+                </div>
+                
+                <div class="space-y-6 pt-4">
+                    <button id="access-btn" onclick="requestAccess()" class="btn-mission">Initiate Verification</button>
+                    <div id="access-msg" class="hidden space-y-4">
+                        <div class="flex items-center gap-3 text-yellow-500 mono text-[10px] uppercase tracking-widest animate-pulse">
+                            <i data-lucide="alert-triangle" size="14"></i>
+                            Verification Pending... Strategic Core Locked
+                        </div>
+                        <div class="h-1 w-48 bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full bg-yellow-500 animate-[progress_3s_infinite]" style="width: 30%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="tech-card p-10 rounded-xl space-y-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-not-allowed relative overflow-hidden group">
+                    <div class="absolute top-4 right-4"><span class="locked-badge">LOCKED</span></div>
+                    <i data-lucide="shield" class="text-cyan-400 group-hover:scale-110 transition-transform" size="40"></i>
+                    <div class="space-y-3">
+                        <h3 class="font-syne text-2xl uppercase text-white">Apophis Tracker</h3>
+                        <p class="text-[10px] mono text-slate-500 uppercase tracking-widest leading-loose">Precision trajectory mapping for planetary interceptors.</p>
+                    </div>
+                </div>
+                <div class="tech-card p-10 rounded-xl space-y-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-not-allowed relative overflow-hidden group">
+                    <div class="absolute top-4 right-4"><span class="locked-badge">LOCKED</span></div>
+                    <i data-lucide="zap" class="text-yellow-400 group-hover:scale-110 transition-transform" size="40"></i>
+                    <div class="space-y-3">
+                        <h3 class="font-syne text-2xl uppercase text-white">Kinetic Core</h3>
+                        <p class="text-[10px] mono text-slate-500 uppercase tracking-widest leading-loose">Automated deflection protocol execution engine.</p>
+                    </div>
+                </div>
+                <div class="tech-card p-10 rounded-xl space-y-8 opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all cursor-not-allowed relative overflow-hidden group col-span-1 md:col-span-2">
+                    <div class="absolute top-4 right-4"><span class="locked-badge">LOCKED</span></div>
+                    <i data-lucide="satellite" class="text-cyan-400 group-hover:scale-110 transition-transform" size="40"></i>
+                    <div class="space-y-3">
+                        <h3 class="font-syne text-2xl uppercase text-white">Centaur Project</h3>
+                        <p class="text-[10px] mono text-slate-500 uppercase tracking-widest leading-loose">Long-range deep space observation network spanning the asteroid belt.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="p-16 border-t border-white/5 bg-black">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+            <span class="font-syne text-2xl uppercase tracking-tighter text-white">coswatch<span class="text-cyan-400">.</span></span>
+            <div class="text-[0.6rem] text-slate-800 font-bold uppercase tracking-[0.5em]">
+                &copy; 2024 Planetary Defense Systems
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const API_URL = 'http://127.0.0.1:8000/neo/feed';
+        const MOCK_DATA = [
+            { name: "99942 Apophis (Critical)", hazardous: true, velocity_kph: 30720, miss_distance_km: 31000, risk_score: 96 },
+            { name: "(2023 DZ2) City Killer", hazardous: true, velocity_kph: 28044, miss_distance_km: 175000, risk_score: 88 },
+            { name: "2024 FG3", hazardous: false, velocity_kph: 15400, miss_distance_km: 12000000, risk_score: 5 },
+            { name: "2012 TC4", hazardous: false, velocity_kph: 50400, miss_distance_km: 44000, risk_score: 42 }
+        ];
+
+        let scene, camera, renderer, earth, asteroids = [];
+        let targetCameraPos = new THREE.Vector3(0, 8, 15);
+        const container = document.getElementById('visualization-container');
+
+        function init3D() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(65, container.clientWidth / container.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            // 1. Restored Atmosphere Glow (From Old Code)
+            const glowGeom = new THREE.SphereGeometry(2.3, 64, 64);
+            const glowMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.05 });
+            const glow = new THREE.Mesh(glowGeom, glowMat);
+            scene.add(glow);
+
+            // 2. Earth
+            const geometry = new THREE.SphereGeometry(2, 64, 64);
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.2 });
+            earth = new THREE.Mesh(geometry, material);
+            scene.add(earth);
+
+            // 3. Restored Grid (From Old Code)
+            const grid = new THREE.GridHelper(30, 30, 0x111111, 0x050505);
+            grid.position.y = -6;
+            scene.add(grid);
+
+            camera.position.set(0, 8, 15);
+            animate3D();
+        }
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            earth.rotation.y += 0.002;
+            asteroids.forEach(a => {
+                a.mesh.position.x = a.orbitRadius * Math.cos(a.angle);
+                a.mesh.position.z = a.orbitRadius * Math.sin(a.angle);
+                a.angle += a.speed;
+            });
+            // Kept the new "Lerp" feature (Smooth camera movement)
+            camera.position.lerp(targetCameraPos, 0.05);
+            camera.lookAt(0, 0, 0);
+            renderer.render(scene, camera);
+        }
+
+        function update3DObjects(data) {
+            asteroids.forEach(a => scene.remove(a.mesh));
+            asteroids = [];
+            data.forEach(neo => {
+                const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(neo.hazardous ? 0.25 : 0.1, 0), 
+                             new THREE.MeshBasicMaterial({ color: neo.hazardous ? 0xffcc00 : 0xffffff, wireframe: true }));
+                mesh.userData = { name: neo.name };
+                const orbitRadius = 4 + Math.random() * 10;
+                asteroids.push({ mesh, orbitRadius, angle: Math.random() * 6, speed: 0.002 });
+                scene.add(mesh);
+            });
+        }
+
+        async function fetchNEOData() {
+            try {
+                const res = await fetch(API_URL);
+                const data = res.ok ? await res.json() : MOCK_DATA;
+                renderDashboard(data);
+                update3DObjects(data);
+            } catch (e) { renderDashboard(MOCK_DATA); update3DObjects(MOCK_DATA); }
+        }
+
+        function renderDashboard(data) {
+            const tableBody = document.getElementById('neo-table-body');
+            document.getElementById('stat-objects').innerText = data.length.toString().padStart(2, '0');
+            
+            // Merged Logic: Used the new gauge bars/pings BUT used the old layout structure
+            tableBody.innerHTML = data.map(neo => {
+                const velPercent = Math.min((neo.velocity_kph / 100000) * 100, 100);
+                return `
+                <tr onclick="focusObject('${neo.name}')" class="${neo.hazardous ? 'hazard-glow' : ''}">
+                    <td class="text-white font-bold">${neo.name}</td>
+                    <td>
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full sonar-ping ${neo.hazardous ? 'ping-red' : 'ping-cyan'}"></div>
+                            <span class="${neo.hazardous ? 'text-red-400' : 'text-slate-500'} font-bold">${neo.hazardous ? 'CRITICAL' : 'STABLE'}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex flex-col">
+                            <span>${parseFloat(neo.velocity_kph).toLocaleString()}</span>
+                            <div class="gauge-bg"><div class="gauge-fill ${neo.hazardous ? 'bg-yellow-500' : 'bg-cyan-500'}" style="width: ${velPercent}%"></div></div>
+                        </div>
+                    </td>
+                    <td class="text-slate-400">${((neo.miss_distance_km || 0)/1000).toLocaleString()}K</td>
+                    <td>
+                        <div class="flex flex-col gap-1 w-20">
+                            <span class="text-[9px] ${neo.risk_score > 70 ? 'text-red-400' : 'text-slate-500'}">${neo.risk_score}%</span>
+                            <div class="risk-bar">
+                                <div class="risk-fill ${neo.risk_score > 70 ? 'bg-red-500' : 'bg-cyan-500'}" style="width: ${neo.risk_score}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+
+        function focusObject(name) {
+            const asteroid = asteroids.find(a => a.mesh.userData.name === name);
+            if (asteroid) {
+                const pos = asteroid.mesh.position.clone().normalize().multiplyScalar(6);
+                targetCameraPos.copy(pos);
+                document.getElementById('target-info').classList.remove('hidden');
+                document.getElementById('locked-target-name').innerText = name;
+                window.location.hash = 'analysis';
+            }
+        }
+        
+        function requestAccess() {
+            const btn = document.getElementById('access-btn');
+            const msg = document.getElementById('access-msg');
+            btn.disabled = true;
+            btn.innerText = "AUTHENTICATING...";
+            msg.classList.remove('hidden');
+        }
+
+        function createStars() {
+            const field = document.getElementById('stars-field');
+            for (let i = 0; i < 150; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.width = star.style.height = Math.random() * 2 + 'px';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+                field.appendChild(star);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => { createStars(); init3D(); fetchNEOData(); lucide.createIcons(); });
+    </script>
+    <script>
+    const API_URL = 'http://127.0.0.1:8000/neo/feed';
+    
+    // Fallback data if API fails
+    const MOCK_DATA = [
+        { name: "99942 Apophis", hazardous: true, velocity_kph: 30720, miss_distance_km: 31000, risk_score: 96 },
+        { name: "(2023 DZ2)", hazardous: true, velocity_kph: 28044, miss_distance_km: 175000, risk_score: 88 },
+        { name: "2024 FG3", hazardous: false, velocity_kph: 15400, miss_distance_km: 12000000, risk_score: 5 }
+    ];
+
+    let scene, camera, renderer, earth, asteroids = [];
+    let targetCameraPos = new THREE.Vector3(0, 8, 15);
+    const container = document.getElementById('visualization-container');
+
+    // --- 1. ROBUST DATA FETCHING ---
+    async function fetchNEOData() {
+        try {
+            const res = await fetch(API_URL);
+            let data = res.ok ? await res.json() : MOCK_DATA;
+            
+            // Normalize data structure (Handle NASA object vs simple Array)
+            if (!Array.isArray(data)) {
+                if (data.near_earth_objects) data = Object.values(data.near_earth_objects).flat();
+                else data = MOCK_DATA;
+            }
+
+            renderDashboard(data);
+            update3DObjects(data);
+
+        } catch (e) {
+            console.error("Data Fetch Error:", e);
+            renderDashboard(MOCK_DATA);
+            update3DObjects(MOCK_DATA);
+        }
+    }
+
+    // --- 2. RENDER DASHBOARD (Logic Fix Here) ---
+    function renderDashboard(data) {
+        // A. Calculate Risk for ALL items first
+        const processedData = data.map(obj => {
+            // Check if API already has risk_score, otherwise calculate it
+            let risk = obj.risk_score;
+            
+            if (risk === undefined || risk === null) {
+                const vel = parseFloat(obj.velocity_kph) || 0;
+                const dist = parseFloat(obj.miss_distance_km) || 10000000;
+                
+                // Formula: 
+                // 1. Velocity Score: Higher speed = higher risk (max 50)
+                const vScore = Math.min((vel / 100000) * 50, 50);
+                // 2. Distance Score: Closer distance = higher risk (max 50)
+                const dScore = Math.max((1 - (dist / 10000000)) * 50, 0);
+                // 3. Hazard Bonus
+                const hBonus = obj.hazardous ? 20 : 0;
+                
+                risk = Math.min(Math.round(vScore + dScore + hBonus), 99);
+            }
+            return { ...obj, risk_score: risk };
+        });
+
+        // B. Sort by Risk (Highest first) to find MAX
+        processedData.sort((a, b) => b.risk_score - a.risk_score);
+        
+        // C. Update "Max Risk" Card
+        const highestRiskObj = processedData[0];
+        const maxRiskVal = highestRiskObj ? highestRiskObj.risk_score : 0;
+        
+        const riskElement = document.getElementById('stat-risk');
+        if (riskElement) {
+            riskElement.innerText = maxRiskVal + "%";
+            // Add click event for mechanism
+            riskElement.parentElement.style.cursor = "pointer";
+            riskElement.parentElement.onclick = () => showRiskMechanism(highestRiskObj);
+        }
+
+        // D. Update Object Count
+        const countElement = document.getElementById('stat-objects');
+        if (countElement) countElement.innerText = processedData.length.toString().padStart(2, '0');
+
+        // E. Render Table
+        const tableBody = document.getElementById('neo-table-body');
+        if (tableBody) {
+            tableBody.innerHTML = processedData.map(neo => {
+                const vel = parseFloat(neo.velocity_kph).toLocaleString();
+                const dist = parseFloat(neo.miss_distance_km).toLocaleString();
+                
+                return `
+                <tr onclick="focusObject('${neo.name}')" class="${neo.hazardous ? 'hazard-glow' : ''}">
+                    <td class="text-white font-bold text-sm py-4">${neo.name}</td>
+                    <td>
+                        <div class="flex items-center gap-3">
+                            <div class="w-1.5 h-1.5 rounded-full ${neo.hazardous ? 'bg-red-500 animate-pulse' : 'bg-cyan-500'}"></div>
+                            <span class="${neo.hazardous ? 'text-red-400' : 'text-slate-500'} font-bold text-xs tracking-widest">${neo.hazardous ? 'CRITICAL' : 'STABLE'}</span>
+                        </div>
+                    </td>
+                    <td class="text-xs font-mono">${vel} <span class="text-slate-600">KM/H</span></td>
+                    <td class="text-slate-400 text-xs font-mono">${dist} KM</td>
+                    <td>
+                        <div class="w-16">
+                            <div class="flex justify-between text-[10px] mb-1">
+                                <span class="${neo.risk_score > 50 ? 'text-red-500' : 'text-cyan-500'} font-bold">${neo.risk_score}%</span>
+                            </div>
+                            <div class="h-1 bg-white/10 rounded-full overflow-hidden">
+                                <div class="h-full ${neo.risk_score > 50 ? 'bg-red-500' : 'bg-cyan-500'}" style="width: ${neo.risk_score}%"></div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    // --- 3. SHOW MECHANISM MODAL ---
+    function showRiskMechanism(obj) {
+        if (!obj) return;
+        const modal = document.getElementById('risk-modal');
+        if (modal) {
+            document.getElementById('risk-target-name').innerText = obj.name;
+            document.getElementById('calc-vel').innerText = parseFloat(obj.velocity_kph).toLocaleString() + " km/h";
+            document.getElementById('calc-dist').innerText = parseFloat(obj.miss_distance_km).toLocaleString() + " km";
+            document.getElementById('calc-haz').innerText = obj.hazardous ? "Active (+20%)" : "Inactive";
+            document.getElementById('calc-total').innerText = obj.risk_score + "%";
+            modal.classList.remove('hidden');
+        }
+    }
+
+    // --- 4. 3D VISUALIZATION (Standard Setup) ---
+    function init3D() {
+        if(!container) return;
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(65, container.clientWidth / container.clientHeight, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+
+        const globe = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 32, 32),
+            new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.1 })
+        );
+        scene.add(globe);
+
+        camera.position.set(0, 6, 12);
+        camera.lookAt(0, 0, 0);
+        animate3D();
+    }
+
+    function animate3D() {
+        requestAnimationFrame(animate3D);
+        if(asteroids.length) {
+            asteroids.forEach(a => {
+                a.mesh.position.x = Math.sin(a.angle) * a.dist;
+                a.mesh.position.z = Math.cos(a.angle) * a.dist;
+                a.angle += a.speed;
+            });
+        }
+        renderer.render(scene, camera);
+    }
+
+    function update3DObjects(data) {
+        asteroids.forEach(a => scene.remove(a.mesh));
+        asteroids = [];
+        data.forEach(neo => {
+            const mesh = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(neo.hazardous ? 0.3 : 0.1), 
+                new THREE.MeshBasicMaterial({ color: neo.hazardous ? 0xff3333 : 0xffffff })
+            );
+            mesh.userData = { name: neo.name };
+            const dist = 4 + Math.random() * 8;
+            asteroids.push({ mesh, dist, angle: Math.random() * Math.PI * 2, speed: (Math.random() * 0.005) + 0.001 });
+            scene.add(mesh);
+        });
+    }
+    
+    function focusObject(name) {
+        // Camera logic here if needed
+        console.log("Focusing on: " + name);
+    }
+
+    function createStars() {
+        const field = document.getElementById('stars-field');
+        if(!field) return;
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.width = Math.random() * 2 + 'px';
+            star.style.height = star.style.width;
+            star.style.top = Math.random() * 100 + '%';
+            star.style.left = Math.random() * 100 + '%';
+            field.appendChild(star);
+        }
+    }
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded', () => {
+        createStars();
+        init3D();
+        fetchNEOData();
+        if(window.lucide) lucide.createIcons();
+    });
+</script>
+</body>
+</html>
