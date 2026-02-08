@@ -375,7 +375,7 @@
     // SAFE VARIABLE NAME: sbClient
     const sbClient = supabase.createClient(SB_URL, SB_KEY);
     
-    const API_URL = 'http://127.0.0.1:8000';
+    const API_URL = 'https://coswatch-production.up.railway.app';
     const MOCK_DATA = [
         { name: "99942 Apophis", hazardous: true, velocity_kph: 30720, miss_distance_km: 31000, risk_score: 96, estimated_diameter: { meters: { estimated_diameter_max: 370 } } },
         { name: "2024 FG3", hazardous: false, velocity_kph: 15400, miss_distance_km: 12000000, risk_score: 5, estimated_diameter: { meters: { estimated_diameter_max: 22 } } }
