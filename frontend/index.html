@@ -463,29 +463,14 @@
     let activeThread = null;
 
  
-function openThread(name) {
-  document.getElementById("thread-panel").classList.remove("hidden");
-  document.getElementById("close-thread-btn").classList.remove("hidden");
-  openThreadData(name);
-}
+
 
 function closeThread() {
   document.getElementById("thread-panel").classList.add("hidden");
   document.getElementById("close-thread-btn").classList.add("hidden");
 }
 
-async function openThreadData(asteroidName) {
-  activeThread = asteroidName;
-  document.getElementById("thread-name").innerText = asteroidName;
-  document.getElementById("thread-panel").classList.remove("hidden");
 
-  const res = await fetch(`${API_URL}/debug/thread-messages/${encodeURIComponent(asteroidName)}`)
-
-  const data = await res.json();
-
-  renderMessages(data.messages || []);
-
-}
 
 function renderMessages(messages) {
   const box = document.getElementById("thread-messages");
