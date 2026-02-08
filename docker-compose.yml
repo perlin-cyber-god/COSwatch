@@ -1,0 +1,22 @@
+services:
+  # Sundeep's Python API (The Brain)
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    networks:
+      - cosmic-watch-network
+
+  # Manager's HTML UI (The Space Theme)
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    networks:
+      - cosmic-watch-network
+    depends_on:
+      - backend
+
+networks:
+  cosmic-watch-network:
+    driver: bridge
