@@ -383,10 +383,13 @@
 
     let scene, camera, renderer, controls;
     let asteroids = [];
+    let followedMesh = null;
     let planets = []; 
     let globalData = []; 
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
+    // Add this with your other global variables
+    let followOffset = new THREE.Vector3();
     let currentUser = null;
 
     // --- 2. AUTH FLOW ---
@@ -695,7 +698,6 @@ function createGlowTexture() {
         if (container.children.length > 0) return; 
 
         scene = new THREE.Scene();
-        // 1. LIGHTING UPGRADE: Brighter, slightly blue-tinted fog for depth
         scene.fog = new THREE.FogExp2(0x020205, 0.002); 
 
         camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 20000); 
@@ -707,10 +709,14 @@ function createGlowTexture() {
         renderer.toneMappingExposure = 1.3; 
         container.appendChild(renderer.domElement);
         
+        // --- 1. UPDATED CONTROLS FOR SMOOTH FOLLOWING ---
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
+        controls.enableDamping = true;  // Critical for the smooth "spring" feel
+        controls.dampingFactor = 0.05;
+        controls.enablePan = false;     // Disable panning so you don't lose the target
+        controls.minDistance = 2;       // Allow getting very close
+        controls.maxDistance = 500;
         
-        // --- 2. SUPER BRIGHT SUN & AMBIENT ---
         const ambientLight = new THREE.AmbientLight(0x606080, 1.2); 
         scene.add(ambientLight);
 
@@ -718,7 +724,7 @@ function createGlowTexture() {
         sunLight.position.set(0, 0, 0);
         scene.add(sunLight);
 
-        // --- 3. MULTI-LAYER STAR SYSTEM ---
+        // --- STARS (Kept your existing star code) ---
         function createStarLayer(count, size, color, spread) {
             const geometry = new THREE.BufferGeometry();
             const positions = new Float32Array(count * 3);
@@ -727,45 +733,28 @@ function createGlowTexture() {
             }
             geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             const material = new THREE.PointsMaterial({
-                size: size,
-                color: color,
-                transparent: true,
-                opacity: 0.8 + Math.random() * 0.2,
-                sizeAttenuation: true,
-                blending: THREE.AdditiveBlending
+                size: size, color: color, transparent: true, opacity: 0.8 + Math.random() * 0.2,
+                sizeAttenuation: true, blending: THREE.AdditiveBlending
             });
             return new THREE.Points(geometry, material);
         }
-
-        // Layer 1: "Star Dust"
         scene.add(createStarLayer(15000, 0.6, 0x8888aa, 5000));
-        // Layer 2: "Main Stars"
         scene.add(createStarLayer(4000, 1.5, 0xffffff, 4000));
-        // Layer 3: "Giants"
         scene.add(createStarLayer(500, 3.5, 0xaaddff, 4000));
 
-
-        // --- SOLAR SYSTEM OBJECTS ---
-        // Sun Mesh 
-        const sun = new THREE.Mesh(
-            new THREE.SphereGeometry(10, 64, 64), 
-            new THREE.MeshBasicMaterial({ color: 0xffaa00 }) 
-        );
+        // --- SOLAR SYSTEM ---
+        const sun = new THREE.Mesh(new THREE.SphereGeometry(10, 64, 64), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
         scene.add(sun);
         
-        // Giant Glow Sprite (Using the Helper Function)
+        // Sun Glow
         const spriteMaterial = new THREE.SpriteMaterial({ 
-            map: createGlowTexture(), 
-            color: 0xffaa00, 
-            transparent: true, 
-            blending: THREE.AdditiveBlending,
-            opacity: 1.0 
+            map: new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/glow.png'), 
+            color: 0xffaa00, transparent: true, blending: THREE.AdditiveBlending 
         });
         const sprite = new THREE.Sprite(spriteMaterial);
         sprite.scale.set(60, 60, 1.0); 
         sun.add(sprite);
 
-        // Planets Setup
         const systemData = [
             { name: "Mercury", color: 0xaaaaaa, size: 0.8, dist: 20, speed: 0.02 },
             { name: "Venus", color: 0xffcc00, size: 1.5, dist: 30, speed: 0.015 },
@@ -778,61 +767,61 @@ function createGlowTexture() {
         ];
 
         systemData.forEach(p => {
-            const pGroup = new THREE.Group();
-            
-            // Planet Mesh
+            // 1. The Orbit Group (Rotates around the sun)
+            const orbitGroup = new THREE.Group();
+            scene.add(orbitGroup);
+
+            // 2. The Planet Mesh
             const mesh = new THREE.Mesh(
                 new THREE.SphereGeometry(p.size, 32, 32), 
                 new THREE.MeshStandardMaterial({ 
-                    color: p.color,
-                    roughness: 0.6,
-                    metalness: 0.1,
-                    emissive: p.color,
-                    emissiveIntensity: 0.1
+                    color: p.color, roughness: 0.6, metalness: 0.1, emissive: p.color, emissiveIntensity: 0.1
                 })
             );
-            mesh.position.x = p.dist;
-            pGroup.add(mesh);
+            
+            // Position the mesh relative to the group (Radius distance)
+            mesh.position.set(p.dist, 0, 0); 
+            
+            // --- CRITICAL: Add UserData for Click Detection ---
+            mesh.userData = { type: 'planet', name: p.name }; 
+            
+            orbitGroup.add(mesh);
             
             // Rings
             if (p.ring) {
                 const ring = new THREE.Mesh(
                     new THREE.TorusGeometry(p.size+1.5, 0.5, 2, 64), 
-                    new THREE.MeshStandardMaterial({ 
-                        color: 0xccaa88, 
-                        transparent: true, 
-                        opacity: 0.8,
-                        side: THREE.DoubleSide
-                    })
+                    new THREE.MeshStandardMaterial({ color: 0xccaa88, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
                 );
                 ring.rotation.x = Math.PI/2;
-                ring.position.x = p.dist;
-                pGroup.add(ring);
+                ring.position.set(p.dist, 0, 0); // Attach to same position as planet
+                orbitGroup.add(ring);
             }
             
-            // Orbit Lines
-            const orbit = new THREE.Line(
+            // Visual Orbit Line (Static)
+            const orbitLine = new THREE.Line(
                 new THREE.BufferGeometry().setFromPoints(new THREE.EllipseCurve(0,0, p.dist, p.dist, 0, 2*Math.PI, false, 0).getPoints(128)),
-                new THREE.LineBasicMaterial({color: 0xffffff, transparent:true, opacity:0.25})
+                new THREE.LineBasicMaterial({color: 0xffffff, transparent:true, opacity:0.1})
             );
-            orbit.rotation.x = Math.PI/2;
-            scene.add(orbit);
-            scene.add(pGroup);
-            planets.push({ group: pGroup, speed: p.speed, name: p.name, mesh });
+            orbitLine.rotation.x = Math.PI/2;
+            scene.add(orbitLine);
+
+            // Store for animation
+            // We store 'group' to rotate the whole system around the sun
+            // We store 'mesh' to rotate the planet on its own axis
+            planets.push({ group: orbitGroup, speed: p.speed, name: p.name, mesh: mesh });
         });
 
-        // --- ADD POINTER TO EARTH (New Delhi) ---
-        // This function must be defined outside init3D
-        addEarthPointer(28.6139, 77.2090); 
-
-        // Event Listeners
         window.addEventListener('resize', () => {
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(container.clientWidth, container.clientHeight);
         });
 
-        window.addEventListener('click', onCanvasClick);
+        // Add the click listener
+        container.addEventListener('click', onCanvasClick); // Changed to container to be safe
+        
+        // Start Loop
         animate();
     }
 
@@ -927,63 +916,65 @@ function createGlowTexture() {
 
     // --- 6. ANIMATION LOOP (Fixed: Unified Prograde Direction) ---
     // --- 6. ANIMATION LOOP (Synchronized Orbits) ---
+    // --- 6. UPDATED ANIMATION LOOP (With 3rd Person Ride) ---
     function animate() {
-        requestAnimationFrame(animate);
+    requestAnimationFrame(animate);
 
-        // A. PLANETS (The Reference Flow)
-        // ---------------------------------------------------------
-        planets.forEach(p => {
-            // Orbit: Counter-Clockwise flow
-            if (p.group) {
-                p.group.rotation.y += p.speed; 
-            }
+    // --- 1. MOVE OBJECTS (Planets & Asteroids) ---
+    // (Keep your existing rotation/movement logic here)
+    planets.forEach(p => {
+        if (p.group) p.group.rotation.y += p.speed;
+        if (p.mesh) p.mesh.rotation.y += 0.005;
+    });
 
-            // Spin: Day/Night Cycle
-            if (p.mesh) {
-                // Venus/Uranus Spin Backwards (Retrograde)
-                if (p.name === "Venus" || p.name === "Uranus") {
-                    p.mesh.rotation.y -= 0.005; 
-                } else {
-                    p.mesh.rotation.y += 0.005; 
-                }
-            }
-        });
+    asteroids.forEach(a => {
+        a.angle -= a.speed;
+        const x = Math.cos(a.angle) * a.dist;
+        const z = Math.sin(a.angle) * a.dist;
+        const y = Math.sin(a.angle) * a.dist * Math.sin(a.inclination);
+        a.mesh.position.set(x, y, z);
+        a.mesh.rotation.x += a.rotSpeed.x;
+        a.mesh.rotation.y += a.rotSpeed.y;
+    });
 
-        // B. ASTEROIDS (Aligned to Planet Flow)
-        // ---------------------------------------------------------
-        asteroids.forEach(a => {
-            // FIX: We SUBTRACT speed to match the Three.js rotation matrix direction
-            // Previous: += (Opposite to planets) -> Now: -= (Same as planets)
-            a.angle -= a.speed; 
+    // --- 2. TPP CAMERA LOCK (The Fix) ---
+    if (followedMesh) {
+        const targetPos = followedMesh.position;
 
-            // Calculate Position
-            // The logic remains standard circle math, but since angle is decreasing,
-            // the direction of travel flips to match the planets.
-            const x = Math.cos(a.angle) * a.dist;
-            const z = Math.sin(a.angle) * a.dist;
-            
-            // Vertical Tilt (Inclination)
-            const y = Math.sin(a.angle) * a.dist * Math.sin(a.inclination);
+        // A. Look at the object
+        controls.target.copy(targetPos);
 
-            // Update Mesh
-            a.mesh.position.set(x, y, z);
-
-            // Tumble the Rock
-            a.mesh.rotation.x += a.rotSpeed.x;
-            a.mesh.rotation.y += a.rotSpeed.y;
-            a.mesh.rotation.z += a.rotSpeed.z;
-        });
-
-        // C. RENDER
-        // ---------------------------------------------------------
-        controls.update();
-        renderer.render(scene, camera);
+        // B. Force Camera Position relative to object
+        // We interpret the existing camera direction and apply it to the new position
+        // This allows the user to rotate around the object while it moves!
+        
+        // Get current distance from target
+        const currentDist = camera.position.distanceTo(targetPos);
+        
+        // If we are too far (user zoomed out) or too close, pull us back to the ideal offset
+        const idealDist = followOffset.length(); // Calculated in click
+        
+        // Logic: Calculate direction from Object TO Camera
+        const direction = new THREE.Vector3().subVectors(camera.position, targetPos).normalize();
+        
+        // New Position = ObjectPosition + (Direction * IdealDistance)
+        const newCamPos = targetPos.clone().add(direction.multiplyScalar(idealDist));
+        
+        // Smoothly set the camera position
+        // 0.1 factor makes it feel like a "spring" arm (smooth), 1.0 is instant lock
+        camera.position.lerp(newCamPos, 0.1); 
     }
+
+    controls.update();
+    renderer.render(scene, camera);
+}
 
     // --- 5. INTERACTIONS ---
     function handleObjectClick(id) {
         const neo = globalData.find(d => d.id === id);
         if(!neo) return;
+
+        // UI UPDATES (Keep existing code...)
         document.querySelectorAll('.mission-row').forEach(r => r.classList.remove('active'));
         document.getElementById(`row-${id}`)?.classList.add('active');
         const card = document.getElementById('detail-card');
@@ -997,25 +988,74 @@ function createGlowTexture() {
         document.getElementById('detail-risk-val').innerText = `${neo.risk_score}%`;
         document.getElementById('detail-risk-bar').style.width = `${neo.risk_score}%`;
 
+        // --- NEW: LINK 3D MESH IF CLICKED FROM LIST ---
         const target3D = asteroids.find(a => a.mesh.userData.id === id);
         if(target3D) {
-            const vec = new THREE.Vector3(); target3D.mesh.getWorldPosition(vec);
-            const camPos = vec.clone().normalize().multiplyScalar(vec.length()+8); camPos.y += 5;
-            gsap.to(camera.position, { duration: 1.5, x: camPos.x, y: camPos.y, z: camPos.z });
-            gsap.to(controls.target, { duration: 1.5, x: vec.x, y: vec.y, z: vec.z });
+            followedMesh = target3D.mesh; // <--- Enable "Ride" mode from list click too
         }
     }
 
     function onCanvasClick(e) {
-        if(e.target.tagName !== 'CANVAS') return;
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-        const hits = raycaster.intersectObjects(asteroids.map(a=>a.mesh));
-        if(hits.length > 0) handleObjectClick(hits[0].object.userData.id);
+    if(e.target.tagName !== 'CANVAS') return;
+    
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    
+    raycaster.setFromCamera(mouse, camera);
+    
+    const allObjects = [...asteroids.map(a => a.mesh), ...planets.map(p => p.mesh)];
+    const hits = raycaster.intersectObjects(allObjects);
+    
+    if(hits.length > 0) {
+        const hit = hits[0].object;
+        
+        // 1. SET FOLLOW TARGET
+        followedMesh = hit;
+
+        // 2. CALCULATE SIZE (Bounding Box)
+        // This ensures we zoom correctly regardless of how big/small the object is
+        const box = new THREE.Box3().setFromObject(hit);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+
+        // 3. DEFINE TPP OFFSET (PUBG Style)
+        // "Back" and "Up" relative to the object
+        // 1.5x distance gives a tight over-the-shoulder look
+        const dist = maxDim * 1.5; 
+        
+        // Save this offset for the animation loop
+        followOffset.set(dist, dist * 0.5, dist); 
+
+        // 4. ANIMATE CAMERA ENTRY
+        // We calculate where the camera *should* be right now
+        const targetPos = hit.position.clone().add(followOffset);
+
+        gsap.to(camera.position, {
+            duration: 1, // Fast zoom
+            x: targetPos.x,
+            y: targetPos.y,
+            z: targetPos.z,
+            onUpdate: () => {
+                // Keep looking at the object during the zoom
+                controls.target.copy(hit.position);
+                controls.update();
+            }
+        });
+
+        // UI Logic (Keep your existing UI logic here)
+        if(hit.userData.id) {
+            handleObjectClick(hit.userData.id);
+        } else {
+            document.getElementById('detail-card').classList.add('hidden');
+        }
     }
+}
 
     function resetCamera(view) {
+        // --- STOP FOLLOWING ---
+        followedMesh = null; 
+
         if(view === 'solar') {
             gsap.to(camera.position, { duration: 2, x: 0, y: 100, z: 150 });
             gsap.to(controls.target, { duration: 2, x: 0, y: 0, z: 0 });
