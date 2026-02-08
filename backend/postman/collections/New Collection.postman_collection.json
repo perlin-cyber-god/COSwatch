@@ -1,0 +1,309 @@
+{
+  "info": {
+    "_postman_id": "fa349075-a752-443e-a194-a4449d5a5fee",
+    "name": "COSwatch API v1",
+    "description": "StartFragment\n\n**Overview:**  \nThis collection provides a comprehensive testing suite for the Cosmic Watch backend. It validates the full data lifecycle—from NASA API ingestion and Risk Analysis to User Authentication and Telegram Bot integration.\n\n- **Base URL:** `{{base_url}}` (Default: `http://127.0.0.1:8000`)\n    \n- **Authentication:** Simulated via `user_id` query parameters (UUIDs) for stateless verification.\n    \n\n**Security Architecture:**\n\n- **Zero-Trust Access:** This API acts as a secure proxy. Direct database access is blocked.\n    \n- **Credential Isolation:** The `SUPABASE_KEY` and `NASA_API_KEY` are stored only on the backend, ensuring no sensitive keys are exposed to the client.\n    \n\nEndFragment",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "User Management",
+      "item": [
+        {
+          "name": "Initialize User (Registration)",
+          "id": "5015edb5-2a3a-454f-a84c-3432040f5f7f",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/init?user_id=a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "init"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+                  "uuid": "b76e6883-0305-4c84-a76f-0709d2b8bbc4"
+                }
+              ]
+            },
+            "description": "StartFragment\n\n\"Registers a user securely. The backend validates the request before creating a record in Supabase with the default 'researcher' role.\n\n\"EndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Approval (Security Check)",
+          "id": "12683585-7884-4418-9665-6d29e95d7fbb",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/init?user_id={{admin_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "init"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "{{admin_id}}",
+                  "type": "text",
+                  "uuid": "68842bd1-1c55-4e9d-86cb-76e2b238a5e1"
+                }
+              ]
+            },
+            "description": "StartFragment\n\nThe API correctly blocks unauthorized users from accessing admin endpoints.\n\nEndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Verify User Tier",
+          "id": "d3eceea0-f4b6-4762-af0d-8f07f1774b7d",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/user/tier/{{test_user_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "user",
+                "tier",
+                "{{test_user_id}}"
+              ]
+            },
+            "description": "Verify the Tier of the user , in this case we are using the user ID of a researcher ."
+          },
+          "response": []
+        }
+      ],
+      "id": "4061601d-58c0-474d-a48b-a25a5b7e5d0e",
+      "description": "StartFragment\n\n**Description:**  \nManages the Authentication & Authorization (AuthN/AuthZ) lifecycle. This folder tests the backend's ability to register users, assign roles (Researcher vs. Admin), and enforce security policies.\n\n- **POST** **`Initialize User`**: Registers a new user in the Supabase database. If the user does not exist, it creates a record with the default `researcher` role.\n    \n- **GET** **`Check User Tier`**: Verifies the current permission level of a user (`pending`, `approved`, or `admin`) to ensure Role-Based Access Control (RBAC) is functioning.\n    \n- **POST** **`Admin Approval`**: A protected endpoint that allows an `admin` to approve a `researcher`. This tests the security logic that blocks unauthorized users from performing administrative actions.\n    \n\nEndFragment"
+    },
+    {
+      "name": "System Health & NASA Data",
+      "item": [
+        {
+          "name": "Root Health Check",
+          "id": "a62c7860-03d3-434e-b237-a76c377d072d",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                ""
+              ]
+            },
+            "description": "Check whether the backend is running or not ."
+          },
+          "response": []
+        },
+        {
+          "name": "Get NASA NEO Feed (The Risk Engine)",
+          "id": "e4cfeac2-c7fb-4cf7-be49-790bb10b46d0",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/neo/feed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "neo",
+                "feed"
+              ]
+            },
+            "description": "Fetches live NASA data, calculates risk scores, and auto-creates Telegram threads for high-risk asteroids."
+          },
+          "response": []
+        }
+      ],
+      "id": "69555ee6-364f-45b2-bcdb-0e6149b3e85b",
+      "description": "StartFragment\n\n**Overview:**\n\nThe core data ingestion engine. It connects to external space agency APIs and processes raw telemetry into actionable risk intelligence.\n\n- **GET** **`Root Health Check`**\n    \n    - **Endpoint:** `/`\n        \n    - **Description:** a lightweight heartbeat endpoint to verify the backend container is running and accessible.\n        \n- **GET** **`Get NASA NEO Feed (The Risk Engine)`**\n    \n    - **Endpoint:** `/neo/feed`\n        \n    - **Description:** Fetches live Near-Earth Object data from the NASA NeoWs API.\n        \n    - **Key Feature (Risk Analysis):** It runs a custom algorithm on the server to calculate a **Risk Score (0-100)** based on diameter and miss distance. Asteroids with `risk_score > 25` automatically trigger a new Telegram thread.\n        \n\nEndFragment"
+    },
+    {
+      "name": "Asteroid Tracking & Security",
+      "item": [
+        {
+          "name": "Track an Asteroid",
+          "id": "91694ea7-8191-495b-aee3-6469fea41f4c",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/asteroid/track?user_id={{admin_id}}&asteroid_name=(2024 BX1)",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "asteroid",
+                "track"
+              ],
+              "query": [
+                {
+                  "key": "user_id",
+                  "value": "{{admin_id}}",
+                  "type": "text",
+                  "uuid": "2550eee1-7dd7-4886-b658-99bcb9953b37"
+                },
+                {
+                  "key": "asteroid_name",
+                  "value": "(2024 BX1)",
+                  "type": "text",
+                  "uuid": "ecb06578-fcc9-45d4-987c-f33928c4c71b"
+                }
+              ]
+            },
+            "description": "StartFragmentSubscribes approved users to asteroid alerts while enforcing security checks to block unauthorized access.EndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Alert System (Debug)",
+          "id": "82fa24f1-d6a2-4827-b00e-4850ddd7b211",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug/alert/(2024 BX1)",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "debug",
+                "alert",
+                "(2024 BX1)"
+              ]
+            },
+            "description": "StartFragmentSimulates a \"Close Approach\" event by triggering direct message (DM) alerts to all users subscribed to the specified asteroid.EndFragment"
+          },
+          "response": []
+        }
+      ],
+      "id": "0889ff40-49b5-4474-b040-e83a5361e0fd",
+      "description": "StartFragment\n\n> \n\n**Overview:** Validates the \"Zero-Trust\" security model by restricting high-value features to verified users only.\n\n \n  \n\n- **GET** **`Track an Asteroid`**\n    \n    - **Endpoint:** `/asteroid/track`\n        \n    - **Description:** Allows a user to subscribe to updates for a specific asteroid.\n        \n    - **Security Validation:** This request **fails** if the user's status is not `\"approved\"` in the database, effectively blocking unverified users from consuming server resources.\n        \n- **GET** **`Test Alert System (Debug)`**\n    \n    - **Endpoint:** `/debug/alert/{asteroid_name}`\n        \n    - **Description:** Simulates a \"Close Approach\" event. It triggers the notification engine to send Direct Messages (DMs) to all users subscribed to the specified asteroid.\n        \n\nEndFragment"
+    },
+    {
+      "name": "Community & Telegram Integration",
+      "item": [
+        {
+          "name": "Manually Create a Discussion Thread",
+          "id": "8f2835a8-ef1c-4fde-a1ad-e8175ba7152d",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug/create-thread/(2024 BX1)",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "debug",
+                "create-thread",
+                "(2024 BX1)"
+              ]
+            },
+            "description": "StartFragment\n\nForces the creation of a dedicated Telegram discussion thread for a specific asteroid, posting its vital statistics.\n\nEndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "List Active Threads",
+          "id": "06302d3e-6c5c-459b-904e-c3a275c10a27",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/threads",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "threads"
+              ]
+            },
+            "description": "StartFragment\n\nRetrieves a list of all active asteroid discussion threads currently being tracked by the community.\n\nEndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Poll for New Telegram Messages",
+          "id": "38e4c679-e094-4ac5-9a7a-7c11c3d1086b",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug/poll-telegram",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "debug",
+                "poll-telegram"
+              ]
+            },
+            "description": "StartFragmet\n\nManually triggers the bot to fetch new messages from Telegram and syncs them to the database.\n\nEndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Read Chat History",
+          "id": "51bfdf18-7d85-4bd0-9c8f-648e386c2c08",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/debug/thread-messages/(2024 BX1)",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "debug",
+                "thread-messages",
+                "(2024 BX1)"
+              ]
+            },
+            "description": "StartFragment\n\nRetrieves the full conversation history for a specific asteroid from the database, allowing users to view past discussions.\n\nEndFragment"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete a Thread",
+          "id": "b26507e1-1ae7-413d-8f88-5b45c0c32db2",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/thread/(2024 BX1)",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "thread",
+                "(2024 BX1)"
+              ]
+            },
+            "description": "StartFragment\n\nPermanently removes an asteroid's discussion thread and all associated messages from the database to clean up storage.\n\nEndFragment"
+          },
+          "response": []
+        }
+      ],
+      "id": "3019218c-dc38-44c2-960d-128ebdd3596a",
+      "description": "StartFragment\n\n> \n\n**Overview:** Manages the two-way synchronization between the web platform and the Telegram Bot, enabling real-time community discussions.\n\n \n  \n\n- **GET** **`Manually Create a Discussion Thread`**\n    \n    - **Endpoint:** `/debug/create-thread/{asteroid_name}`\n        \n    - **Description:** Forces the creation of a dedicated discussion topic in the Telegram group for a specific asteroid. It posts a \"THREAD STARTED\" message with the asteroid's vital statistics.\n        \n- **GET** **`List Active Threads`**\n    \n    - **Endpoint:** `/threads`\n        \n    - **Description:** Retrieves a list of all asteroids currently being discussed by the community.\n        \n- **GET** **`Poll for New Telegram Messages`**\n    \n    - **Endpoint:** `/debug/poll-telegram`\n        \n    - **Description:** Manually triggers the \"Long Polling\" process to fetch new replies from Telegram and sync them to the `thread_messages` database table.\n        \n- **GET** **`Read Chat History`**\n    \n    - **Endpoint:** `/debug/thread-messages/{asteroid_name}`\n        \n    - **Description:** Fetches the full conversation history for an asteroid from the database. This allows the web frontend to display the chat log even if the user isn't on Telegram.\n        \n\nEndFragment"
+    }
+  ]
+}
