@@ -2,60 +2,58 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from datetime import date, timedelta
-import os
 import threading
 import time
+import os
 from dotenv import load_dotenv
-from supabase import create_client
 
-# ---------- LOCAL IMPORTS ----------
-from telegram_client import send_message, send_dm, get_updates
+from fake_chat_store import get_messages, add_message
+from telegram_dm_bot import poll_updates, send_dm, ACTIVE_CHAT_IDS
 from telegram_updates import handle_update
-from asteroid_context import create_asteroid_thread
-from thread_store import delete_thread, list_threads
-from message_store import get_messages, delete_messages
-from dm_state import ACTIVE_DM_CHAT_ID
 
-# ---------- ENV ----------
+
+# ================= ENV =================
 load_dotenv()
 
 NASA_API_KEY = os.getenv("NASA_API_KEY")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+if not NASA_API_KEY:
+    raise RuntimeError("Missing NASA_API_KEY")
 
-if not NASA_API_KEY or not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Missing environment variables")
-
-# ---------- CONSTANTS ----------
 NASA_BASE_URL = "https://api.nasa.gov/neo/rest/v1"
-AUTO_THREAD_RISK_THRESHOLD = 25
-AUTO_SYNC_INTERVAL = 60  # seconds
 
-# ---------- STATE ----------
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-app = FastAPI()
+AUTO_SYNC_INTERVAL = 60  # seconds
+RISK_ALERT_THRESHOLD = 40
+
 last_update_id = None
 previous_risk_map = {}
 
-# ---------- MIDDLEWARE ----------
+app = FastAPI()
+
+
+# ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[
+        "http://127.0.0.1:5500",
+        "http://0.0.0.0:5500",
+        "http://localhost:5500",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------- STARTUP ----------
+
+# ================= STARTUP =================
 @app.on_event("startup")
 def startup():
-    send_message("COSwatch backend online. Science imminent.")
+    print("[STARTUP] COSwatch backend online")
     threading.Thread(target=auto_sync, daemon=True).start()
     threading.Thread(target=periodic_check, daemon=True).start()
 
 
-# ---------- RISK ENGINE ----------
-def risk_score(neo):
+# ================= UTILS =================
+def risk_score(neo: dict) -> float:
     try:
         diameter = neo["estimated_diameter"]["meters"]["estimated_diameter_max"]
         hazardous = neo["is_potentially_hazardous_asteroid"]
@@ -68,15 +66,27 @@ def risk_score(neo):
         score += max(0, 20 - (miss / 1_000_000))
         return round(score, 2)
     except Exception:
-        return 0
+        return 0.0
 
 
-# ---------- ROUTES ----------
+def notify_users(message: str):
+    for chat_id in ACTIVE_CHAT_IDS:
+        send_dm(chat_id, message)
+
+
+# ================= ROUTES =================
 @app.get("/")
 def root():
     return {"status": "Cosmic Watch Backend Running"}
 
 
+# ---- frontend login handshake ----
+@app.post("/user/init")
+def init_user(_: dict):
+    return {"tier": "guest"}
+
+
+# ---- NEO FEED ----
 @app.get("/neo/feed")
 def get_neo_feed():
     today = date.today()
@@ -93,152 +103,125 @@ def get_neo_feed():
     res.raise_for_status()
     data = res.json()
 
-    result = []
+    output = []
 
     for day in data.get("near_earth_objects", {}):
         for neo in data["near_earth_objects"][day]:
             try:
                 approach = neo["close_approach_data"][0]
-                velocity = float(approach["relative_velocity"]["kilometers_per_hour"])
-                distance = float(approach["miss_distance"]["kilometers"])
+                velocity = float(
+                    approach["relative_velocity"]["kilometers_per_hour"]
+                )
+                distance = float(
+                    approach["miss_distance"]["kilometers"]
+                )
+                diameter = round(
+                    neo["estimated_diameter"]["meters"]["estimated_diameter_max"], 1
+                )
             except Exception:
-                velocity = 0
-                distance = 0
+                velocity = 0.0
+                distance = 0.0
+                diameter = 10.0
 
             risk = risk_score(neo)
 
-            if risk >= AUTO_THREAD_RISK_THRESHOLD:
-                create_asteroid_thread(
-                    neo["name"],
-                    supabase,
-                    context={
-                        "risk_score": risk,
-                        "velocity": round(velocity, 1),
-                        "miss_distance": round(distance, 1),
-                    }
-                )
-
-            result.append({
-                "id": neo["id"],
+            output.append({
+                "id": neo["id"],                  # thread id
                 "name": neo["name"],
                 "hazardous": neo["is_potentially_hazardous_asteroid"],
                 "velocity_kph": velocity,
                 "miss_distance_km": distance,
-                "risk_score": risk
+                "risk_score": risk,
+                "size_m": diameter,               # REQUIRED by frontend
             })
 
-    return result
+    return output
 
 
-@app.post("/debug/poll-telegram")
-def poll_telegram():
-    global last_update_id
-
-    updates = get_updates(last_update_id)
-    for u in updates:
-        handle_update(u, supabase)
-        last_update_id = u["update_id"] + 1
-
-    return {"processed": len(updates)}
-
-
-@app.get("/debug/thread-messages/{asteroid_name}")
-def debug_thread_messages(asteroid_name: str):
+# ================= FAKE CHAT =================
+@app.get("/thread/{thread_id}")
+def get_thread(thread_id: str):
     return {
-        "asteroid": asteroid_name,
-        "messages": get_messages(supabase, asteroid_name)
+        "thread_id": thread_id,
+        "messages": get_messages(thread_id),
     }
 
 
-@app.delete("/thread/{asteroid_name}")
-def delete_thread_endpoint(asteroid_name: str):
-    if not delete_thread(supabase, asteroid_name):
-        return {"status": "thread not found"}
+@app.post("/thread/{thread_id}/message")
+def post_thread_message(thread_id: str, payload: dict):
+    text = payload.get("text")
+    user = payload.get("user", "guest")
 
-    delete_messages(supabase, asteroid_name)
-    return {"status": "thread deleted"}
+    if not text:
+        return {"error": "empty message"}
 
-
-@app.get("/threads")
-def get_threads():
-    return {"threads": list_threads(supabase)}
+    add_message(thread_id, user, text)
+    return {"status": "ok"}
 
 
-# ---------- AUTO SYNC ----------
+# ================= AUTO SYNC =================
 def auto_sync():
     while True:
         try:
-            print("[AUTO-SYNC] Fetching NASA feed…")
+            print("[AUTO-SYNC] Fetching NASA feed")
             get_neo_feed()
         except Exception as e:
             print("[AUTO-SYNC ERROR]", e)
         time.sleep(AUTO_SYNC_INTERVAL)
 
 
-# ---------- ROGUE DETECTION ----------
-def detect_rogue_asteroids(current_data):
+# ================= RISK MONITOR =================
+def detect_rogue_asteroids(data):
     global previous_risk_map
     deltas = []
 
-    for neo in current_data:
-        name = neo["name"]
+    for neo in data:
+        tid = neo["id"]
         risk = neo["risk_score"]
-        old = previous_risk_map.get(name, 0)
+        old = previous_risk_map.get(tid, 0)
         delta = risk - old
 
-        if delta > 0:
+        if delta > 0 and risk >= RISK_ALERT_THRESHOLD:
             deltas.append({
-                "name": name,
+                "id": tid,
+                "name": neo["name"],
                 "risk": risk,
-                "delta": round(delta, 2)
+                "delta": round(delta, 2),
             })
 
-        previous_risk_map[name] = risk
+        previous_risk_map[tid] = risk
 
-    deltas.sort(key=lambda x: x["delta"], reverse=True)
-    return deltas[:4]
-
-
-def send_rogue_dm(message: str):
-    if ACTIVE_DM_CHAT_ID is None:
-        print("[DM SKIPPED] No active user")
-        return
-    send_dm(ACTIVE_DM_CHAT_ID, message)
+    return deltas
 
 
 def periodic_check():
     while True:
         try:
             data = get_neo_feed()
-            top = detect_rogue_asteroids(data)
+            alerts = detect_rogue_asteroids(data)
 
-            if top:
-                msg = "🚨 Asteroid Risk Update\n\n" + "\n".join(
-                    f"{i+1}. {x['name']} | Risk {x['risk']} (+{x['delta']})"
-                    for i, x in enumerate(top)
+            for a in alerts:
+                notify_users(
+                    f"🚨 Asteroid Alert\n\n"
+                    f"{a['name']}\n"
+                    f"Risk: {a['risk']} (+{a['delta']})"
                 )
-                send_rogue_dm(msg)
 
         except Exception as e:
             print("[AUTO CHECK ERROR]", e)
 
         time.sleep(AUTO_SYNC_INTERVAL)
 
-#chat 
 
+# ================= TELEGRAM =================
+@app.post("/debug/poll-telegram")
+def poll_telegram():
+    global last_update_id
 
-@app.post("/thread/{asteroid_name}/message")
-def post_thread_message(asteroid_name: str, payload: dict):
-    user = payload.get("user", "web")
-    text = payload.get("text")
+    updates = poll_updates(last_update_id)
 
-    if not text:
-        return {"error": "empty"}
+    for u in updates:
+        handle_update(u)
+        last_update_id = u["update_id"] + 1
 
-    # store message
-    add_message(supabase, asteroid_name, user, text)
-
-    # OPTIONAL: also forward to Telegram thread
-    send_message(f"[WEB] {user}: {text}")
-
-    return {"status": "ok"}
+    return {"processed": len(updates)}

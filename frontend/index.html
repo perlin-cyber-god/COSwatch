@@ -419,7 +419,7 @@
     // SAFE VARIABLE NAME: sbClient
     const sbClient = supabase.createClient(SB_URL, SB_KEY);
     
-    const API_URL = 'https://coswatch-production.up.railway.app';
+    const API_URL = 'http://127.0.0.1:8000';
     const MOCK_DATA = [
         { name: "99942 Apophis", hazardous: true, velocity_kph: 30720, miss_distance_km: 31000, risk_score: 96, estimated_diameter: { meters: { estimated_diameter_max: 370 } } },
         { name: "2024 FG3", hazardous: false, velocity_kph: 15400, miss_distance_km: 12000000, risk_score: 5, estimated_diameter: { meters: { estimated_diameter_max: 22 } } }
@@ -465,18 +465,43 @@
  
 
 
+function openThread(threadId) {
+  if (!threadId) return;
+
+  activeThread = threadId;
+
+  document.getElementById("thread-panel").classList.remove("hidden");
+  document.getElementById("close-thread-btn").classList.remove("hidden");
+  document.getElementById("thread-name").innerText = threadId;
+
+  loadThreadMessages(threadId);
+}
+
 function closeThread() {
   document.getElementById("thread-panel").classList.add("hidden");
   document.getElementById("close-thread-btn").classList.add("hidden");
+  activeThread = null;
 }
 
+async function loadThreadMessages(threadId) {
+  const res = await fetch(`${API_URL}/thread/${threadId}`);
+
+  if (!res.ok) {
+    renderMessages([]);
+    return;
+  }
+
+  const data = await res.json();
+  renderMessages(data.messages || []);
+}
 
 
 function renderMessages(messages) {
   const box = document.getElementById("thread-messages");
 
   if (!Array.isArray(messages) || messages.length === 0) {
-    box.innerHTML = `<div class="text-slate-500 text-xs mono">No messages yet.</div>`;
+    box.innerHTML =
+      `<div class="text-slate-500 text-xs mono">No messages yet.</div>`;
     return;
   }
 
@@ -494,44 +519,21 @@ async function sendThreadMessage() {
   const input = document.getElementById("thread-input");
   if (!input.value || !activeThread) return;
 
-  await fetch(`${API_URL}/thread/${encodeURIComponent(activeThread)}/message`, {
+  await fetch(`${API_URL}/thread/${activeThread}/message`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    user: currentUser?.email || "guest",
+    text: input.value
+  })
+});
 
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user: currentUser?.email || "guest",
-      text: input.value
-    })
-  });
 
   input.value = "";
-  openThread(activeThread); // reload
+  loadThreadMessages(activeThread);
 }
 
 
-
-async function openThreadData(asteroidName) {
-  activeThread = asteroidName;
-  document.getElementById("thread-name").innerText = asteroidName;
-
-  const res = await fetch(
-  `${API_URL}/debug/thread-messages/${encodeURIComponent(asteroidName)}`
-);
-
-
-  if (res.status === 404) {
-    await fetch(
-      `${API_URL}/debug/create-thread/${encodeURIComponent(asteroidName)}`,
-      { method: "POST" }
-    );
-
-    renderMessages([]);
-    return;
-  }
-
-  const data = await res.json();
-  renderMessages(data.messages || []);
-}
 
 
 
@@ -1107,7 +1109,7 @@ function createGlowTexture() {
     const neo = globalData.find(d => d.id === id);
     if (!neo) return;
 
-    currentAsteroidName = neo.name;
+    currentAsteroidName = neo.id;
 
     document.querySelectorAll('.mission-row')
         .forEach(r => r.classList.remove('active'));
